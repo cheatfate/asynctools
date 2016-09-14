@@ -8,18 +8,90 @@
 #
 
 ## This module implements cross-platform asynchronous inter-process
-## communication. 
-## 
-## Module uses shared memory implementation for Windows, and fifo(7) for
-## Linux/BSD/MacOS.
+## communication.
+##
+## Module uses shared memory for Windows, and fifos for Linux/BSD/MacOS.
+##
+## .. code-block:: nim
+##
+##   var inBuffer = newString(64)
+##   var outBuffer = "TEST STRING BUFFER"
+##
+##   # create new IPC object
+##   let ipc = createIpc("test")
+##   # open `read` side channel to IPC object
+##   let readHandle = open("test", sideReader)
+##   # open `write` side channel to IPC object
+##   let writeHandle = open("test", sideWriter)
+##
+##   # writing string to IPC object
+##   waitFor write(writeHandle, cast[pointer](addr outBuffer[0]), len(outBuffer))
+##   # reading data from IPC object
+##   var c = waitFor readInto(readHandle, cast[pointer](addr inBuffer[0]), 64)
+##
+##   inBuffer.setLen(c)
+##   doAssert(inBuffer == outBuffer)
+##
+##   # Close `read` side channel
+##   close(readHandle)
+##   # Close `write` side channel
+##   close(writeHandle)
+##   # Close IPC object
+##   close(ipc)
 
-import asyncdispatch, os
+import asyncdispatch, os, strutils
 
 type
-  SideType* = enum
+  SideType* = enum ## Enum represents side of IPC channel (Read or Write)
     sideReader, sideWriter
 
-when defined(windows):
+when defined(nimdoc):
+  type
+    AsyncIpc* = object
+      ## Object represents IPC object.
+
+    AsyncIpcHandle* = object
+      ## Object represents channel to IPC object.
+
+  proc createIpc*(name: string, size = 65536): AsyncIpc =
+    ## Creates new ``AsyncIpc`` object with internal buffer size ``size``.
+
+  proc close*(ipc: AsyncIpc) =
+    ## Closes ``ipc`` object.
+
+  proc open*(name: string, side: SideType, register = true): AsyncIpcHandle =
+    ## Opens channel with type ``side`` to ``AsyncIpc`` object with name
+    ## ``name``.
+    ##
+    ## If ``register`` is `false`, then created channel will not be registerd
+    ## with current dispatcher.
+
+  proc close*(ipch: AsyncIpcHandle, unregister = true) =
+    ## Closes channel to ``AsyncIpc`` object.
+    ##
+    ## If ``unregister`` is `false`, channel will not be unregistered from
+    ## current dispatcher.
+
+  proc write*(ipch: AsyncIpcHandle, data: pointer, size: int): Future[void] =
+    ## This procedure writes an untyped ``data`` of ``size`` size to the
+    ## channel ``ipch``.
+    ##
+    ## The returned future will complete once ``all`` data has been sent.
+
+  proc readInto*(ipch: AsyncIpcHandle, data: pointer, size: int): Future[int] =
+    ## This procedure reads **up to** ``size`` bytes from channel ``ipch``
+    ## into ``data``, which must at least be of that size.
+    ##
+    ## Returned future will complete once all the data requested is read or
+    ## part of the data has been read.
+
+  proc `$`*(ipc: AsyncIpc): string =
+    ## Returns string representation of ``ipc`` object.
+
+  proc `$`*(ipch: AsyncIpcHandle): string =
+    ## Returns string representation of ``ipch`` object.
+
+elif defined(windows):
   import winlean
   import sets, hashes # this import only for HackDispatcher
 
@@ -69,8 +141,37 @@ when defined(windows):
   proc getCurrentDispatcher(): HackDispatcher =
     result = cast[HackDispatcher](getGlobalDispatcher())
 
+  proc `$`*(ipc: AsyncIpc): string =
+    if ipc.handleMap == Handle(0):
+      result = "AsyncIpc [invalid or inactive handle]"
+    else:
+      var data = mapViewOfFileEx(ipc.handleMap, FILE_MAP_READ, 0, 0, mapMinSize,
+                                 nil)
+      if data == nil:
+        result = "AsyncIpc [invalid or inactive handle]"
+      else:
+        var status = ""
+        var stat = cast[ptr int32](data)[]
+        if (stat and 1) != 0: status &= "R"
+        if (stat and 2) != 0: status &= "W"
+        discard unmapViewOfFile(data)
+        result = "AsyncIpc [handle = 0x" & toHex(int(ipc.handleMap)) & ", " &
+                 "event = 0x" & toHex(int(ipc.eventChange)) & ", " &
+                 "name = \"" & ipc.name & "\", " &
+                 "size = " & $ipc.size & ", " &
+                 "status = [" & status & "]" &
+                 "]"
+
+  proc `$`*(ipch: AsyncIpcHandle): string =
+    var side = if ipch.side == sideWriter: "writer" else: "reader"
+    result = "AsyncIpcHandle [handle = 0x" & toHex(int(ipch.handleMap)) & ", " &
+             "event = 0x" & toHex(int(ipch.eventChange)) & ", " &
+             "data = 0x" & toHex(cast[int](ipch.data)) & ", " &
+             "size = " & $ipch.size & ", " &
+             "side = " & side &
+             "]"
+
   proc createIpc*(name: string, size = 65536): AsyncIpc =
-    ## Creates `AsyncIpc` object with internal buffer size `size`.
     var sa = SECURITY_ATTRIBUTES(nLength: sizeof(SECURITY_ATTRIBUTES).cint,
                                  lpSecurityDescriptor: nil, bInheritHandle: 1)
     let mapName = newWideCString(mapHeaderName & name)
@@ -108,16 +209,12 @@ when defined(windows):
     )
 
   proc close*(ipc: AsyncIpc) =
-    ## Closes `AsyncIpc` object.
     if closeHandle(ipc.handleMap) == 0:
       raiseOSError(osLastError())
     if closeHandle(ipc.eventChange) == 0:
       raiseOSError(osLastError())
 
   proc open*(name: string, side: SideType, register = true): AsyncIpcHandle =
-    ## Opens `side` channel to AsyncIpc object.
-    ## If `register` is `false`, newly created channel will not be registerd
-    ## with current dispatcher.
     let mapName = newWideCString(mapHeaderName & name)
     let nameChange = newWideCString(eventHeaderName & name & "_change")
 
@@ -173,9 +270,6 @@ when defined(windows):
     )
 
   proc close*(ipch: AsyncIpcHandle, unregister = true) =
-    ## Closes channel to `AsyncIpc` object.
-    ## If `unregister` is false, channel will not be unregistered from
-    ## current dispatcher.
     if ipch.side == sideWriter:
       interlockedAnd(cast[ptr int32](ipch.data), not(2))
     else:
@@ -332,6 +426,22 @@ else:
       size: int
       side: SideType
 
+  proc `$`*(ipch: AsyncIpc): string =
+    let ipcName = pipeHeaderName & ipc.name
+    if posix.access(cstring(ipcName), F_OK) != 0:
+      result = "AsyncIpc [invalid or inactive handle]"
+    else:
+      result = "AsyncIpc [name = \"" & ipc.name & "\", " &
+               "size = " & $ipch.size &
+               "]"
+
+  proc `$`*(ipch: AsyncIpcHandle): string =
+    let side = if ipch.side == sideWriter: "writer" else: "reader"
+    result = "AsyncIpcHandle [fd = 0x" & toHex(cint(ipch.fd)) & ", " &
+             "size = " & $ipch.size & ", " &
+             "side = " & side &
+             "]"
+
   proc setNonBlocking(fd: cint) {.inline.} =
     var x = fcntl(fd, F_GETFL, 0)
     if x == -1:
@@ -434,25 +544,19 @@ else:
     return retFuture
 
 when isMainModule:
-  var inBuffer = newString(64)
-  var outHeader = "TEST STRING BUFFER"
-  var data = ""
-  var length = 0
-
   when not defined(windows):
-    discard posix.unlink("/tmp/asyncipc_test")
+    discard posix.unlink(pipeHeaderName & "test")
 
-  var ipc = createIpc("test")
-  var readHandle = open("test", sideReader)
-  var writeHandle = open("test", sideWriter)
+  var inBuffer = newString(64)
+  var outBuffer = "TEST STRING BUFFER"
+  let ipc = createIpc("test")
+  let readHandle = open("test", sideReader)
+  let writeHandle = open("test", sideWriter)
 
-  data = outHeader & " 1"
-  waitFor write(writeHandle, cast[pointer](addr data[0]), len(data))
-  length = waitFor readInto(readHandle, cast[pointer](addr inBuffer[0]), 64)
-  inBuffer.setLen(length)
-  doAssert(data == inBuffer)
+  waitFor write(writeHandle, cast[pointer](addr outBuffer[0]), len(outBuffer))
+  var c = waitFor readInto(readHandle, cast[pointer](addr inBuffer[0]), 64)
+  inBuffer.setLen(c)
+  doAssert(inBuffer == outBuffer)
   close(readHandle)
   close(writeHandle)
   close(ipc)
-
-

@@ -7,14 +7,89 @@
 #    distribution, for details about the copyright.
 #
 
-import asyncdispatch, os
+## This module implements cross-platform asynchronous pipes communication.
+##
+## Module uses named pipes for Windows, and anonymous pipes for
+## Linux/BSD/MacOS.
+##
+## .. code-block:: nim
+##   var inBuffer = newString(64)
+##   var outBuffer = "TEST STRING BUFFER"
+##
+##   # Create new pipe
+##   var o = createPipe()
+##
+##   # Write string to pipe
+##   waitFor write(o.writePipe, cast[pointer](addr outBuffer[0]),
+##                 outBuffer.len)
+##   # Read data from pipe
+##   var c = waitFor readInto(o.readPipe, cast[pointer](addr inBuffer[0]),
+##                            inBuffer.len)
+##
+##   inBuffer.setLen(c)
+##   doAssert(inBuffer == outBuffer)
+##
+##   # Close `write` side of pipe
+##   close(o.writePipe)
+##   # Close `read` side of pipe
+##   close(o.readPipe)
+
+import asyncdispatch, os, strutils
 
 type
   AsyncPipe* = distinct AsyncFD
 
 proc `==`*(x: AsyncPipe, y: AsyncPipe): bool {.borrow.}
 
-when defined(windows):
+when defined(nimdoc):
+  type
+    AsyncPipe* = distinct AsyncFD ## Object represents ``AsyncPipe``.
+
+  proc createPipe*(inSize = 65536'i32, outSize = 65536'i32,
+                   register = true): tuple[readPipe, writePipe: AsyncPipe] =
+    ## Create descriptor pair for interprocess communication.
+    ##
+    ## Returns ``tuple`` with read side of pipe as ``readPipe`` member
+    ## and write side of pipe as ``writePipe`` member.
+    ##
+    ## If ``register`` is `false`, both pipes will not be registered with
+    ## current dispatcher.
+
+  proc close*(pipe: AsyncPipe, unregister = true) =
+    ## Closes pipe ``pipe``.
+    ##
+    ## If ``unregister`` is `false`, pipe will not be unregistered from
+    ## current dispatcher.
+
+  proc write*(pipe: AsyncPipe, data: pointer, nbytes: int): Future[void] =
+    ## This procedure writes an untyped ``data`` of ``size`` size to the
+    ## pipe ``pipe``.
+    ##
+    ## The returned future will complete once ``all`` data has been sent.
+
+  proc readInto*(pipe: AsyncPipe, data: pointer, nbytes: int): Future[int] =
+    ## This procedure reads **up to** ``size`` bytes from pipe ``pipe``
+    ## into ``data``, which must at least be of that size.
+    ##
+    ## Returned future will complete once all the data requested is read or
+    ## part of the data has been read.
+
+  proc wrap*(handle: Handle|cint): AsyncPipe =
+    ## Wraps existing pipe handle to be asynchronous and register it with
+    ## current dispatcher.
+    ##
+    ## Returns ``AsyncPipe`` object.
+    ##
+    ## Windows HANDLE must be opened with ``FILE_FLAG_OVERLAPPED``. You
+    ## can use ``ReopenFile()`` function to convert existing handle to
+    ## overlapped variant.
+    ##
+    ## Posix handle will be modified with ``O_NONBLOCK``.
+
+  proc unwrap*(pipe: AsyncPipe) =
+    ## Unregisters ``pipe`` handle from current dispatcher.
+
+elif defined(windows):
   import winlean
 
   proc QueryPerformanceCounter(res: var int64)
@@ -39,10 +114,12 @@ when defined(windows):
   proc unwrap*(pipe: AsyncPipe) =
     unregister(AsyncFD(pipe))
 
-  proc asyncPipes*(inSize = 65536'i32,
-                   outSize = 65536'i32,
+  proc `$`*(pipe: AsyncPipe): string =
+    result = "AsyncPipe [handle = 0x" & toHex(cast[int](pipe)) & "]"
+
+  proc createPipe*(inSize = 65536'i32, outSize = 65536'i32,
                    register = true): tuple[readPipe, writePipe: AsyncPipe] =
-    ## Create descriptor pair for interprocess communication.
+
     var number = 0'i64
     var pipeName: WideCString
     var pipeIn: Handle
@@ -104,7 +181,7 @@ when defined(windows):
       raiseOsError(osLastError())
 
   proc write*(pipe: AsyncPipe, data: pointer, nbytes: int): Future[void] =
-    var retFuture = newFuture[void]("asyncpipes.write")
+    var retFuture = newFuture[void]("asyncpipe.write")
     var ol = PCustomOverlapped()
     GC_ref(ol)
     ol.data = CompletionData(fd: AsyncFD(pipe), cb:
@@ -134,7 +211,7 @@ when defined(windows):
     return retFuture
 
   proc readInto*(pipe: AsyncPipe, data: pointer, nbytes: int): Future[int] =
-    var retFuture = newFuture[int]("asyncpipes.readInto")
+    var retFuture = newFuture[int]("asyncpipe.readInto")
     var ol = PCustomOverlapped()
     GC_ref(ol)
     ol.data = CompletionData(fd: AsyncFD(pipe), cb:
@@ -183,7 +260,10 @@ else:
   proc unwrap*(pipe: AsyncPipe) =
     unregister(AsyncFD(pipe))
 
-  proc asyncPipes*(register = true): tuple[readPipe, writePipe: AsyncPipe] =
+  proc `$`*(pipe: AsyncPipe): string =
+    result = "AsyncPipe [fd = 0x" & toHex(cast[cint](pipe)) & "]"
+
+  proc createPipe*(register = true): tuple[readPipe, writePipe: AsyncPipe] =
     var fds: array[2, cint]
 
     if posix.pipe(fds) == -1:
@@ -205,7 +285,7 @@ else:
       raiseOSError(osLastError())
 
   proc write*(pipe: AsyncPipe, data: pointer, nbytes: int): Future[void] =
-    var retFuture = newFuture[void]("asyncpipes.write")
+    var retFuture = newFuture[void]("asyncpipe.write")
     var written = 0
 
     proc cb(fd: AsyncFD): bool =
@@ -231,7 +311,7 @@ else:
     return retFuture
 
   proc readInto*(pipe: AsyncPipe, data: pointer, nbytes: int): Future[int] =
-    var retFuture = newFuture[int]("asyncpipes.readInto")
+    var retFuture = newFuture[int]("asyncpipe.readInto")
     proc cb(fd: AsyncFD): bool =
       result = true
       let res = posix.read(cint(pipe), data, cint(nbytes))
@@ -253,10 +333,12 @@ else:
 when isMainModule:
   var inBuffer = newString(64)
   var outBuffer = "TEST STRING BUFFER"
-  var o = asyncPipes()
+  var o = createPipe()
   waitFor write(o.writePipe, cast[pointer](addr outBuffer[0]),
                 outBuffer.len)
   var c = waitFor readInto(o.readPipe, cast[pointer](addr inBuffer[0]),
                            inBuffer.len)
   inBuffer.setLen(c)
   doAssert(inBuffer == outBuffer)
+  close(o.writePipe)
+  close(o.readPipe)

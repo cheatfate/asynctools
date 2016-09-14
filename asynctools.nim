@@ -1,2 +1,2 @@
-import asynctools/asyncpipes, asynctools/asyncipc
-export asyncpipes, asyncipc
+import asynctools/asyncpipe, asynctools/asyncipc
+export asyncpipe, asyncipc
