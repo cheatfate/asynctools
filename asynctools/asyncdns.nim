@@ -14,7 +14,7 @@
 ## Supported platforms: Linux, Windows, MacOS, FreeBSD, NetBSD, OpenBSD,
 ## Solaris.
 
-import asyncdispatch, os, nativesockets, hexdump, strutils
+import asyncdispatch, os, nativesockets, strutils
 
 const
   PACKETSZ = 512
@@ -22,7 +22,6 @@ const
 type
   uncheckedArray {.unchecked.} [T] = array[0..100_000, T]
   AsyncAddrInfo* = distinct AddrInfo
-
 
 when defined(windows):
   import winlean
@@ -197,7 +196,6 @@ when defined(windows):
     var xid = getXid()
     var buflen = 0.Dword
     var buffer: pointer = nil
-    echo "XID = " & toHex(cast[int16](xid))
     while true:
       let res = dnsWriteQuestionToBuffer(buffer, addr buflen,
                                          newWideCString(address), qt,
