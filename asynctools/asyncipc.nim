@@ -423,22 +423,20 @@ else:
   type
     AsyncIpcHandle* = object
       fd: AsyncFD
-      size: int
       side: SideType
 
-  proc `$`*(ipch: AsyncIpc): string =
+  proc `$`*(ipc: AsyncIpc): string =
     let ipcName = pipeHeaderName & ipc.name
     if posix.access(cstring(ipcName), F_OK) != 0:
       result = "AsyncIpc [invalid or inactive handle]"
     else:
       result = "AsyncIpc [name = \"" & ipc.name & "\", " &
-               "size = " & $ipch.size &
+               "size = " & $ipc.size &
                "]"
 
   proc `$`*(ipch: AsyncIpcHandle): string =
     let side = if ipch.side == sideWriter: "writer" else: "reader"
     result = "AsyncIpcHandle [fd = 0x" & toHex(cint(ipch.fd)) & ", " &
-             "size = " & $ipch.size & ", " &
              "side = " & side &
              "]"
 
@@ -484,7 +482,6 @@ else:
     result = AsyncIpcHandle(
       fd: afd,
       side: side,
-      size: ipc.size
     )
 
   proc close*(ipch: AsyncIpcHandle) =
