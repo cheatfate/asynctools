@@ -11,8 +11,10 @@
 ## 
 ## asyncGetAddrInfo() don't have support for `flags` argument.
 ## 
-## Supported platforms: Linux, Windows, MacOS, FreeBSD, NetBSD, OpenBSD,
+## Supported platforms: Linux, Windows, MacOS, FreeBSD, NetBSD, OpenBSD(*),
 ## Solaris.
+##
+## * OpenBSD requires `libbind` package.
 
 import asyncdispatch, os, nativesockets, strutils
 
@@ -339,8 +341,7 @@ else:
   when defined(linux) or defined(macosx):
     {.passL: "-lresolv".}
 
-  when defined(freebsd) or defined(openbsd) or defined(linux) or
-       defined(macosx):
+  when defined(freebsd) or defined(linux) or defined(macosx):
     const headers = """#include <sys/types.h>
                        #include <netinet/in.h>
                        #include <arpa/nameser.h>
@@ -354,6 +355,14 @@ else:
   elif defined(netbsd):
     const headers = """#include <resolv.h>
                        #include <res_update.h>"""
+  elif defined(openbsd):
+    {.hint: "*** OpenBSD requires `libbind` package to be installed".}
+    const headers = """#include <sys/types.h>
+                       #include <netinet/in.h>
+                       #include <arpa/nameser.h>
+                       #include <resolv.h>"""
+    {.passC: "-I/usr/local/include/bind".}
+    {.passL: "-L/usr/local/lib/libbind -R/usr/local/lib/libbind -lbind".}
   else:
     {.error: "Unsupported operation system!".}
 
