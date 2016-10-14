@@ -40,7 +40,7 @@ else:
 
 when defined(nimdoc):
   type
-    AsyncPipe* = object ## Object represents ``AsyncPipe``.
+    AsyncPipe* = ref object ## Object represents ``AsyncPipe``.
 
   proc createPipe*(inSize = 65536'i32, outSize = 65536'i32,
                    register = true): tuple[readPipe, writePipe: AsyncPipe] =
@@ -107,7 +107,7 @@ when defined(nimdoc):
 
 else:
   type
-    AsyncPipe* = object
+    AsyncPipe* = ref object of RootRef
       when defined(windows):
         readPipe: Handle
         writePipe: Handle
@@ -137,7 +137,6 @@ else:
       ERROR_PIPE_BUSY = 231
 
     proc `$`*(pipe: AsyncPipe): string =
-      ## NIMDOC FUCKING CHANGES
       result = "AsyncPipe [read = 0x" & toHex(cast[int](pipe.readPipe)) &
                           "write = 0x" & toHex(cast[int](pipe.writePipe)) & "]"
 
@@ -174,8 +173,7 @@ else:
         discard closeHandle(pipeIn)
         raiseOsError(err)
 
-      result.readPipe = pipeIn
-      result.writePipe = pipeOut
+      result = AsyncPipe(readPipe: pipeIn, writePipe: pipeOut)
 
       var ovl = OVERLAPPED()
       let res = connectNamedPipe(pipeIn, cast[pointer](addr ovl))
@@ -206,13 +204,11 @@ else:
       if result.writePipe != 0:
         register(AsyncFD(result.writePipe))
 
-    proc unwrap*(pipe: var AsyncPipe) =
+    proc unwrap*(pipe: AsyncPipe) =
       if pipe.readPipe != 0:
         unregister(AsyncFD(pipe.readPipe))
-        pipe.readPipe = 0
       if pipe.writePipe != 0:
         unregister(AsyncFD(pipe.writePipe))
-        pipe.writePipe = 0
 
     proc getRead*(pipe: AsyncPipe): Handle {.inline.} =
       result = pipe.readPipe
@@ -220,7 +216,7 @@ else:
     proc getWrite*(pipe: AsyncPipe): Handle {.inline.} =
       result = pipe.writePipe
 
-    proc closeRead*(pipe: var AsyncPipe, unregister = true) =
+    proc closeRead*(pipe: AsyncPipe, unregister = true) =
       if pipe.readPipe != 0:
         if unregister:
           unregister(AsyncFD(pipe.readPipe))
@@ -228,7 +224,7 @@ else:
           raiseOsError(osLastError())
         pipe.readPipe = 0
 
-    proc closeWrite*(pipe: var AsyncPipe, unregister = true) =
+    proc closeWrite*(pipe: AsyncPipe, unregister = true) =
       if pipe.writePipe != 0:
         if unregister:
           unregister(AsyncFD(pipe.writePipe))
@@ -236,7 +232,7 @@ else:
           raiseOsError(osLastError())
         pipe.writePipe = 0
 
-    proc close*(pipe: var AsyncPipe, unregister = true) =
+    proc close*(pipe: AsyncPipe, unregister = true) =
       closeRead(pipe, unregister)
       closeWrite(pipe, unregister)
 
@@ -362,21 +358,21 @@ else:
     proc getWrite*(pipe: AsyncPipe): cint {.inline.} =
       result = pipe.writePipe
 
-    proc closeRead*(pipe: var AsyncPipe, unregister = true) =
+    proc closeRead*(pipe: AsyncPipe, unregister = true) =
       if pipe.readPipe != 0:
         if unregister:
           unregister(AsyncFD(pipe.readPipe))
         if posix.close(cint(pipe.readPipe)) != 0:
           raiseOSError(osLastError())
 
-    proc closeWrite*(pipe: var AsyncPipe, unregister = true) =
+    proc closeWrite*(pipe: AsyncPipe, unregister = true) =
       if pipe.writePipe != 0:
         if unregister:
           unregister(AsyncFD(pipe.writePipe))
         if posix.close(cint(pipe.writePipe)) != 0:
           raiseOSError(osLastError())
 
-    proc close*(pipe: var AsyncPipe, unregister = true) =
+    proc close*(pipe: AsyncPipe, unregister = true) =
       closeRead(pipe, unregister)
       closeWrite(pipe, unregister)
 
