@@ -31,23 +31,16 @@
 ##   # Close pipe
 ##   close(o)
 
-import asyncdispatch, os, strutils
-
-when defined(windows):
-  import winlean
-else:
-  import posix
+import asyncdispatch, os
 
 when defined(nimdoc):
   type
     AsyncPipe* = ref object ## Object represents ``AsyncPipe``.
 
-  proc createPipe*(inSize = 65536'i32, outSize = 65536'i32,
-                   register = true): tuple[readPipe, writePipe: AsyncPipe] =
+  proc createPipe*(register = true): AsyncPipe =
     ## Create descriptor pair for interprocess communication.
     ##
-    ## Returns ``tuple`` with read side of pipe as ``readPipe`` member
-    ## and write side of pipe as ``writePipe`` member.
+    ## Returns ``AsyncPipe`` object, which represents OS specific pipe.
     ##
     ## If ``register`` is `false`, both pipes will not be registered with
     ## current dispatcher.
@@ -82,11 +75,12 @@ when defined(nimdoc):
     ## If ``unregister`` is `false`, pipe will not be unregistered from
     ## current dispatcher.
 
-  proc write*(pipe: AsyncPipe, data: pointer, nbytes: int): Future[void] =
+  proc write*(pipe: AsyncPipe, data: pointer, nbytes: int): Future[int] =
     ## This procedure writes an untyped ``data`` of ``size`` size to the
     ## pipe ``pipe``.
     ##
-    ## The returned future will complete once ``all`` data has been sent.
+    ## The returned future will complete once ``all`` data has been sent or
+    ## part of the data has been sent.
 
   proc readInto*(pipe: AsyncPipe, data: pointer, nbytes: int): Future[int] =
     ## This procedure reads up to ``size`` bytes from pipe ``pipe``
@@ -95,10 +89,14 @@ when defined(nimdoc):
     ## Returned future will complete once all the data requested is read or
     ## part of the data has been read.
 
-  proc wrap*(readHandle: Handle|cint, writeHandle: Handle|cint): AsyncPipe =
+  proc asyncWrap*(readHandle: Handle|cint = 0,
+                  writeHandle: Handle|cint = 0): AsyncPipe =
     ## Wraps existing OS specific pipe handles to ``AsyncPipe`` and register
-    ## it with current dispatcher. ``readHandle`` - read side of pipe, can
-    ## be ``0``. ``writeHandle`` - write side of pipe, can be ``0``.
+    ## it with current dispatcher.
+    ##
+    ## ``readHandle`` - read side of pipe (optional value).
+    ## ``writeHandle`` - write side of pipe (optional value).
+    ## **Note**: At least one handle must be specified.
     ##
     ## Returns ``AsyncPipe`` object.
     ##
@@ -108,10 +106,16 @@ when defined(nimdoc):
     ##
     ## Posix handle will be modified with ``O_NONBLOCK``.
 
-  proc unwrap*(pipe: AsyncPipe) =
+  proc asyncUnwrap*(pipe: AsyncPipe) =
     ## Unregisters ``pipe`` handle from current async dispatcher.
 
 else:
+
+  when defined(windows):
+    import winlean
+  else:
+    import posix
+
   type
     AsyncPipe* = ref object of RootRef
       when defined(windows):
@@ -132,22 +136,24 @@ else:
       pipeHeaderName = r"\\.\pipe\asyncpipe_"
 
     const
+      DEFAULT_PIPE_SIZE = 65536'i32
       FILE_FLAG_FIRST_PIPE_INSTANCE = 0x00080000'i32
       PIPE_WAIT = 0x00000000'i32
-      #PIPE_NOWAIT = 0x00000001'i32
       #PIPE_TYPE_BYTE = 0x00000000'i32
       #PIPE_READMODE_BYTE = 0x00000000'i32
       PIPE_TYPE_MESSAGE = 0x00000004'i32
       PIPE_READMODE_MESSAGE = 0x00000002'i32
       ERROR_PIPE_CONNECTED = 535
       ERROR_PIPE_BUSY = 231
+      ERROR_BROKEN_PIPE = 109
+      ERROR_PIPE_NOT_CONNECTED = 233
+      #ERROR_NO_DATA = 232
 
     proc `$`*(pipe: AsyncPipe): string =
-      result = "AsyncPipe [read = 0x" & toHex(cast[int](pipe.readPipe)) &
-               ", write = 0x" & toHex(cast[int](pipe.writePipe)) & "]"
+      result = "AsyncPipe [read = " & $(cast[uint](pipe.readPipe)) &
+               ", write = " & $(cast[int](pipe.writePipe)) & "]"
 
-    proc createPipe*(inSize = 65536'i32, outSize = 65536'i32,
-                     register = true): AsyncPipe =
+    proc createPipe*(register = true): AsyncPipe =
 
       var number = 0'i64
       var pipeName: WideCString
@@ -163,7 +169,7 @@ else:
                        PIPE_ACCESS_INBOUND
         var pipeMode = PIPE_TYPE_MESSAGE or PIPE_READMODE_MESSAGE or PIPE_WAIT
         pipeIn = createNamedPipe(pipeName, openMode, pipeMode, 1'i32,
-                                 inSize, outSize,
+                                 DEFAULT_PIPE_SIZE, DEFAULT_PIPE_SIZE,
                                  1'i32, addr sa)
         if pipeIn == INVALID_HANDLE_VALUE:
           let err = osLastError()
@@ -203,14 +209,17 @@ else:
         register(AsyncFD(pipeIn))
         register(AsyncFD(pipeOut))
 
-    proc wrap*(readHandle: Handle, writeHandle: Handle): AsyncPipe =
+    proc asyncWrap*(readHandle = Handle(0),
+                    writeHandle = Handle(0)): AsyncPipe =
+      doAssert(readHandle != 0 or writeHandle != 0)
+
       result = AsyncPipe(readPipe: readHandle, writePipe: writeHandle)
       if result.readPipe != 0:
         register(AsyncFD(result.readPipe))
       if result.writePipe != 0:
         register(AsyncFD(result.writePipe))
 
-    proc unwrap*(pipe: AsyncPipe) =
+    proc asyncUnwrap*(pipe: AsyncPipe) =
       if pipe.readPipe != 0:
         unregister(AsyncFD(pipe.readPipe))
       if pipe.writePipe != 0:
@@ -245,8 +254,8 @@ else:
       closeRead(pipe, unregister)
       closeWrite(pipe, unregister)
 
-    proc write*(pipe: AsyncPipe, data: pointer, nbytes: int): Future[void] =
-      var retFuture = newFuture[void]("asyncpipe.write")
+    proc write*(pipe: AsyncPipe, data: pointer, nbytes: int): Future[int] =
+      var retFuture = newFuture[int]("asyncpipe.write")
       var ol = PCustomOverlapped()
 
       if pipe.writePipe == 0:
@@ -258,26 +267,26 @@ else:
           proc (fd: AsyncFD, bytesCount: DWord, errcode: OSErrorCode) =
             if not retFuture.finished:
               if errcode == OSErrorCode(-1):
-                assert bytesCount == nbytes.int32
-                retFuture.complete()
+                retFuture.complete(bytesCount)
               else:
                 retFuture.fail(newException(OSError, osErrorMsg(errcode)))
         )
         let res = writeFile(pipe.writePipe, data, nbytes.int32, nil,
                             cast[POVERLAPPED](ol)).bool
         if not res:
-          let err = osLastError()
-          if err.int32 != ERROR_IO_PENDING:
+          let errcode = osLastError()
+          if errcode.int32 != ERROR_IO_PENDING:
             GC_unref(ol)
-            retFuture.fail(newException(OSError, osErrorMsg(err)))
+            retFuture.fail(newException(OSError, osErrorMsg(errcode)))
         else:
-          var bytesWritten = 0.Dword
+          var bytesWrote = 0.Dword
           if getOverlappedResult(pipe.writePipe, cast[POVERLAPPED](ol),
-                                 bytesWritten, Winbool(false)) == 0:
+                                 bytesWrote, Winbool(false)) == 0:
+            GC_unref(ol)
             retFuture.fail(newException(OSError, osErrorMsg(osLastError())))
           else:
-            assert bytesWritten == nbytes
-            retFuture.complete()
+            assert bytesWrote == nbytes
+            retFuture.complete(bytesWrote)
       return retFuture
 
     proc readInto*(pipe: AsyncPipe, data: pointer, nbytes: int): Future[int] =
@@ -296,28 +305,38 @@ else:
                 assert(bytesCount > 0 and bytesCount <= nbytes.int32)
                 retFuture.complete(bytesCount)
               else:
-                retFuture.fail(newException(OSError, osErrorMsg(errcode)))
+                if errcode.int32 in {ERROR_BROKEN_PIPE,
+                                     ERROR_PIPE_NOT_CONNECTED}:
+                  retFuture.complete(bytesCount)
+                else:
+                  retFuture.fail(newException(OSError, osErrorMsg(errcode)))
         )
         let res = readFile(pipe.readPipe, data, nbytes.int32, nil,
                            cast[POVERLAPPED](ol)).bool
         if not res:
           let err = osLastError()
-          if err.int32 != ERROR_IO_PENDING:
+          if err.int32 in {ERROR_BROKEN_PIPE, ERROR_PIPE_NOT_CONNECTED}:
+            GC_unref(ol)
+            retFuture.complete(0)
+          elif err.int32 != ERROR_IO_PENDING:
             GC_unref(ol)
             retFuture.fail(newException(OSError, osErrorMsg(err)))
         else:
           var bytesRead = 0.DWord
-          let ores = getOverlappedResult(pipe.readPipe,
-                                         cast[POverlapped](ol), bytesRead,
-                                         false.WINBOOL)
-          if not ores.bool:
-            retFuture.fail(newException(OSError, osErrorMsg(osLastError())))
+          if getOverlappedResult(pipe.readPipe, cast[POverlapped](ol),
+                                 bytesRead, Winbool(false)) == 0:
+            let errcode = osLastError()
+            if errcode.int32 in {ERROR_BROKEN_PIPE, ERROR_PIPE_NOT_CONNECTED}:
+              GC_unref(ol)
+              retFuture.complete(0)
+            else:
+              GC_unref(ol)
+              retFuture.fail(newException(OSError, osErrorMsg(errcode)))
           else:
             assert(bytesRead > 0 and bytesRead <= nbytes)
             retFuture.complete(bytesRead)
       return retFuture
   else:
-    import posix
 
     proc setNonBlocking(fd: cint) {.inline.} =
       var x = fcntl(fd, F_GETFL, 0)
@@ -329,10 +348,10 @@ else:
           raiseOSError(osLastError())
 
     proc `$`*(pipe: AsyncPipe): string =
-      result = "AsyncPipe [read = 0x" & toHex(cast[cint](pipe.readPipe)) &
-                ", write = 0x" & toHex(cast[cint](pipe.writePipe)) & "]"
+      result = "AsyncPipe [read = " & $(cast[uint](pipe.readPipe)) &
+                ", write = " & $(cast[uint](pipe.writePipe)) & "]"
 
-    proc createPipe*(register = true): AsyncPipe =
+    proc createPipe*(size = 65536, register = true): AsyncPipe =
       var fds: array[2, cint]
 
       if posix.pipe(fds) == -1:
@@ -346,7 +365,8 @@ else:
         register(AsyncFD(fds[0]))
         register(AsyncFD(fds[1]))
 
-    proc wrap*(readHandle: cint, writeHandle: cint): AsyncPipe =
+    proc asyncWrap*(readHandle = cint(0), writeHandle = cint(0)): AsyncPipe =
+      doAssert((readHandle != 0) or (writeHandle != 0))
       result = AsyncPipe(readPipe: readHandle, writePipe: writeHandle)
       if result.readPipe != 0:
         setNonBlocking(result.readPipe)
@@ -355,7 +375,7 @@ else:
         setNonBlocking(result.writePipe)
         register(AsyncFD(result.writePipe))
 
-    proc unwrap*(pipe: AsyncPipe) =
+    proc asyncUnwrap*(pipe: AsyncPipe) =
       if pipe.readPipe != 0:
         unregister(AsyncFD(pipe.readPipe))
       if pipe.writePipe != 0:
@@ -390,14 +410,14 @@ else:
       closeRead(pipe, unregister)
       closeWrite(pipe, unregister)
 
-    proc write*(pipe: AsyncPipe, data: pointer, nbytes: int): Future[void] =
-      var retFuture = newFuture[void]("asyncpipe.write")
-      var written = 0
+    proc write*(pipe: AsyncPipe, data: pointer, nbytes: int): Future[int] =
+      var retFuture = newFuture[int]("asyncpipe.write")
+      var bytesWrote = 0
 
       proc cb(fd: AsyncFD): bool =
         result = true
-        let reminder = nbytes - written
-        let pdata = cast[pointer](cast[uint](data) + written.uint)
+        let reminder = nbytes - bytesWrote
+        let pdata = cast[pointer](cast[uint](data) + bytesWrote.uint)
         let res = posix.write(pipe.writePipe, pdata, cint(reminder))
         if res < 0:
           let err = osLastError()
@@ -405,15 +425,21 @@ else:
             retFuture.fail(newException(OSError, osErrorMsg(err)))
           else:
             result = false # We still want this callback to be called.
+        elif res == 0:
+          retFuture.complete(bytesWrote)
         else:
-          written.inc(res)
+          bytesWrote.inc(res)
           if res != reminder:
             result = false
           else:
-            retFuture.complete()
+            retFuture.complete(bytesWrote)
 
-      if not cb(AsyncFD(pipe.writePipe)):
-        addWrite(AsyncFD(pipe.writePipe), cb)
+      if pipe.writePipe == 0:
+        retFuture.fail(newException(ValueError,
+                                  "Write side of pipe closed or not available"))
+      else:
+        if not cb(AsyncFD(pipe.writePipe)):
+          addWrite(AsyncFD(pipe.writePipe), cb)
       return retFuture
 
     proc readInto*(pipe: AsyncPipe, data: pointer, nbytes: int): Future[int] =
@@ -432,18 +458,98 @@ else:
         else:
           retFuture.complete(res)
 
-      if not cb(AsyncFD(pipe.readPipe)):
-        addRead(AsyncFD(pipe.readPipe), cb)
+      if pipe.readPipe == 0:
+        retFuture.fail(newException(ValueError,
+                                   "Read side of pipe closed or not available"))
+      else:
+        if not cb(AsyncFD(pipe.readPipe)):
+          addRead(AsyncFD(pipe.readPipe), cb)
       return retFuture
 
 when isMainModule:
-  var inBuffer = newString(64)
+
+  when not defined(windows):
+    const
+      SIG_DFL = cast[proc(x: cint) {.noconv,gcsafe.}](0)
+      SIG_IGN = cast[proc(x: cint) {.noconv,gcsafe.}](1)
+  else:
+    const
+      ERROR_NO_DATA = 232
+
   var outBuffer = "TEST STRING BUFFER"
-  var o = createPipe()
-  waitFor write(o, cast[pointer](addr outBuffer[0]),
-                outBuffer.len)
-  var c = waitFor readInto(o, cast[pointer](addr inBuffer[0]),
-                           inBuffer.len)
-  inBuffer.setLen(c)
-  doAssert(inBuffer == outBuffer)
-  close(o)
+
+  block test1:
+    # simple read/write test
+    var inBuffer = newString(64)
+    var o = createPipe()
+    var sc = waitFor write(o, cast[pointer](addr outBuffer[0]),
+                           outBuffer.len)
+    doAssert(sc == len(outBuffer))
+    var rc = waitFor readInto(o, cast[pointer](addr inBuffer[0]),
+                              inBuffer.len)
+    inBuffer.setLen(rc)
+    doAssert(inBuffer == outBuffer)
+    close(o)
+
+  block test2:
+    # read from pipe closed write side
+    var inBuffer = newString(64)
+    var o = createPipe()
+    o.closeWrite()
+    var rc = waitFor readInto(o, cast[pointer](addr inBuffer[0]),
+                              inBuffer.len)
+    doAssert(rc == 0)
+
+  block test3:
+    # write to closed read side
+    var sc: int = -1
+    var o = createPipe()
+    o.closeRead()
+    when not defined(windows):
+      posix.signal(SIGPIPE, SIG_IGN)
+
+    try:
+      sc = waitFor write(o, cast[pointer](addr outBuffer[0]),
+                         outBuffer.len)
+    except:
+      discard
+    doAssert(sc == -1)
+
+    when not defined(windows):
+      doAssert(osLastError().int32 == EPIPE)
+    else:
+      doAssert(osLastError().int32 == ERROR_NO_DATA)
+
+    when not defined(windows):
+      posix.signal(SIGPIPE, SIG_DFL)
+
+  block test4:
+    # bulk test of sending/receiving data
+    const
+      testsCount = 5000
+
+    proc sender(o: AsyncPipe) {.async.} =
+      var data = 1'i32
+      for i in 1..testsCount:
+        data = int32(i)
+        let res = await write(o, addr data, sizeof(int32))
+        doAssert(res == sizeof(int32))
+      closeWrite(o)
+
+    proc receiver(o: AsyncPipe): Future[tuple[count: int, sum: int]] {.async.} =
+      var data = 0'i32
+      result = (count: 0, sum: 0)
+      while true:
+        let res = await readInto(o, addr data, sizeof(int32))
+        if res == 0:
+          break
+        doAssert(res == sizeof(int32))
+        inc(result.sum, data)
+        inc(result.count)
+
+    var o = createPipe()
+    asyncCheck sender(o)
+    let res = waitFor(receiver(o))
+    doAssert(res.count == testsCount)
+    doAssert(res.sum == testsCount * (1 + testsCount) div 2)
+
