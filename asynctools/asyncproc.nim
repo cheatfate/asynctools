@@ -370,7 +370,6 @@ when defined(windows):
     if len(workingDir) > 0: wd = workingDir
     # processing echo command line
     if poEchoCmd in options: echo($cmdl)
-    echo $cmdl
     # building security attributes for process and main thread
     var psa = SECURITY_ATTRIBUTES(nLength: sizeof(SECURITY_ATTRIBUTES).cint,
                                   lpSecurityDescriptor: nil, bInheritHandle: 1)
@@ -815,9 +814,7 @@ proc execProcess(command: string, args: seq[string] = @[],
   while true:
     let res = await p.outputHandle.readInto(addr data[0], bufferSize)
     if res > 0:
-      echo res
       data.setLen(res)
-      echo data
       result.output &= data
       data.setLen(bufferSize)
     else:
