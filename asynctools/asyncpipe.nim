@@ -377,6 +377,7 @@ else:
           unregister(AsyncFD(pipe.readPipe))
         if posix.close(cint(pipe.readPipe)) != 0:
           raiseOSError(osLastError())
+        pipe.readPipe = 0
 
     proc closeWrite*(pipe: AsyncPipe, unregister = true) =
       if pipe.writePipe != 0:
@@ -384,6 +385,7 @@ else:
           unregister(AsyncFD(pipe.writePipe))
         if posix.close(cint(pipe.writePipe)) != 0:
           raiseOSError(osLastError())
+        pipe.writePipe = 0
 
     proc close*(pipe: AsyncPipe, unregister = true) =
       closeRead(pipe, unregister)
