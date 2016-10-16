@@ -302,7 +302,6 @@ else:
                            cast[POVERLAPPED](ol)).bool
         if not res:
           let err = osLastError()
-          echo "err = " & $err
           if err.int32 != ERROR_IO_PENDING:
             GC_unref(ol)
             retFuture.fail(newException(OSError, osErrorMsg(err)))
