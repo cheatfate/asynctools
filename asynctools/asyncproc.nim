@@ -43,7 +43,7 @@ type
                           ## at the process' output streams.
     poDemon               ## Windows: The program creates no Window.
 
-  ProcessObj = object of RootObj
+  AsyncProcessObj = object of RootObj
     inPipe: AsyncPipe
     outPipe: AsyncPipe
     errPipe: AsyncPipe
@@ -60,7 +60,7 @@ type
     exitCode: cint
     options: set[ProcessOption]
 
-  Process* = ref ProcessObj ## represents an operating system process
+  AsyncProcess* = ref AsyncProcessObj ## represents an operating system process
 
 proc quoteShellWindows*(s: string): string =
   ## Quote s, so it can be safely passed to Windows API.
@@ -141,7 +141,7 @@ proc startProcess*(command: string, workingDir: string = "",
                      options: set[ProcessOption] = {poStdErrToStdOut},
                      pipeStdin: AsyncPipe = nil,
                      pipeStdout: AsyncPipe = nil,
-                     pipeStderr: AsyncPipe = nil): Process
+                     pipeStderr: AsyncPipe = nil): AsyncProcess
   ## Starts a process.
   ##
   ## ``command`` is the executable file path
@@ -178,7 +178,7 @@ proc startProcess*(command: string, workingDir: string = "",
   ## Return value: The newly created process object. Nil is never returned,
   ## but ``EOS`` is raised in case of an error.
 
-proc suspend*(p: Process)
+proc suspend*(p: AsyncProcess)
   ## Suspends the process ``p``.
   ##
   ## On Posix OSes the procedure sends ``SIGSTOP`` signal to the process.
@@ -186,7 +186,7 @@ proc suspend*(p: Process)
   ## On Windows procedure suspends main thread execution of process via
   ## ``SuspendThread()``. WOW64 processes is also supported.
 
-proc resume*(p: Process)
+proc resume*(p: AsyncProcess)
   ## Resumes the process ``p``.
   ##
   ## On Posix OSes the procedure sends ``SIGCONT`` signal to the process.
@@ -194,31 +194,31 @@ proc resume*(p: Process)
   ## On Windows procedure resumes execution of main thread via
   ## ``ResumeThread()``. WOW64 processes is also supported.
 
-proc terminate*(p: Process)
+proc terminate*(p: AsyncProcess)
   ## Stop the process ``p``. On Posix OSes the procedure sends ``SIGTERM``
   ## to the process. On Windows the Win32 API function ``TerminateProcess()``
   ## is called to stop the process.
 
-proc kill*(p: Process)
+proc kill*(p: AsyncProcess)
   ## Kill the process ``p``. On Posix OSes the procedure sends ``SIGKILL`` to
   ## the process. On Windows ``kill()`` is simply an alias for ``terminate()``.
 
-proc running*(p: Process): bool
+proc running*(p: AsyncProcess): bool
   ## Returns `true` if the process ``p`` is still running. Returns immediately.
 
-proc processID*(p: Process): int =
+proc processID*(p: AsyncProcess): int =
   ## Returns process ``p`` id.
   return p.procId
 
-proc inputHandle*(p: Process): AsyncPipe {.inline.} =
+proc inputHandle*(p: AsyncProcess): AsyncPipe {.inline.} =
   ## Returns ``AsyncPipe`` handle to ``STDIN`` pipe of process ``p``.
   result = p.inPipe
 
-proc outputHandle*(p: Process): AsyncPipe {.inline.} =
+proc outputHandle*(p: AsyncProcess): AsyncPipe {.inline.} =
   ## Returns ``AsyncPipe`` handle to ``STDOUT`` pipe of process ``p``.
   result = p.outPipe
 
-proc errorHandle*(p: Process): AsyncPipe {.inline.} =
+proc errorHandle*(p: AsyncProcess): AsyncPipe {.inline.} =
   ## Returns ``AsyncPipe`` handle to ``STDERR`` pipe of process ``p``.
   result = p.errPipe
 
@@ -255,7 +255,7 @@ when defined(windows):
       inc(L, x.len+1)
     (str, L)
 
-  proc close(p: Process) =
+  proc close(p: AsyncProcess) =
     if p.inPipe != nil: close(p.inPipe)
     if p.outPipe != nil: close(p.outPipe)
     if p.errPipe != nil: close(p.errPipe)
@@ -266,12 +266,12 @@ when defined(windows):
                     options: set[ProcessOption] = {poStdErrToStdOut},
                     pipeStdin: AsyncPipe = nil,
                     pipeStdout: AsyncPipe = nil,
-                    pipeStderr: AsyncPipe = nil): Process =
+                    pipeStderr: AsyncPipe = nil): AsyncProcess =
     var
       si: STARTUPINFO
       procInfo: PROCESS_INFORMATION
 
-    result = Process(options: options)
+    result = AsyncProcess(options: options)
     si.cb = sizeof(STARTUPINFO).cint
 
     if not isNil(pipeStdin):
@@ -409,7 +409,7 @@ when defined(windows):
         closeWrite(result.outPipe)
         closeWrite(result.errPipe)
 
-  proc suspend(p: Process) =
+  proc suspend(p: AsyncProcess) =
     var res = 0'i32
     if p.isWow64:
       res = wow64SuspendThread(p.fThreadHandle)
@@ -418,12 +418,12 @@ when defined(windows):
     if res < 0:
       raiseOsError(osLastError())
 
-  proc resume(p: Process) =
+  proc resume(p: AsyncProcess) =
     let res = resumeThread(p.fThreadHandle)
     if res < 0:
       raiseOsError(osLastError())
 
-  proc running(p: Process): bool =
+  proc running(p: AsyncProcess): bool =
     var value = 0'i32
     let res = getExitCodeProcess(p.fProcessHandle, value)
     if res == 0:
@@ -432,14 +432,14 @@ when defined(windows):
       if value == STILL_ACTIVE:
         result = true
 
-  proc terminate(p: Process) =
+  proc terminate(p: AsyncProcess) =
     if running(p):
       discard terminateProcess(p.fProcessHandle, 0)
 
-  proc kill(p: Process) =
+  proc kill(p: AsyncProcess) =
     terminate(p)
 
-  proc peekExitCode(p: Process): int =
+  proc peekExitCode(p: AsyncProcess): int =
     var value = 0'i32
     let res = getExitCodeProcess(p.fProcessHandle, value)
     if res == 0:
@@ -505,10 +505,10 @@ else:
                     options: set[ProcessOption] = {poStdErrToStdOut},
                     pipeStdin: AsyncPipe = nil,
                     pipeStdout: AsyncPipe = nil,
-                    pipeStderr: AsyncPipe = nil): Process =
+                    pipeStderr: AsyncPipe = nil): AsyncProcess =
     var sd = StartProcessData()
 
-    result = Process(options: options)
+    result = AsyncProcess(options: options)
 
     if not isNil(pipeStdin):
       sd.pStdin = pipeStdin.getHandles()
@@ -732,7 +732,7 @@ else:
     startProcessFail(data)
   {.pop}
 
-  proc close(p: Process) =
+  proc close(p: AsyncProcess) =
     # we need to `wait` for process, to avoid `zombie`, so if `running()`
     ## returns `false`, then process exited and `wait()` was called.
     doAssert(not p.running())
@@ -740,7 +740,7 @@ else:
     if p.outPipe != nil: close(p.outPipe)
     if p.errPipe != nil: close(p.errPipe)
 
-  proc running(p: Process): bool =
+  proc running(p: AsyncProcess): bool =
     result = true
     if p.isExit:
       result = false
@@ -757,7 +757,7 @@ else:
           p.exitCode = (status and 0xFF00) shr 8
           result = false
 
-  proc peekExitCode(p: Process): int =
+  proc peekExitCode(p: AsyncProcess): int =
     if p.isExit:
       result = p.exitCode
     else:
@@ -772,24 +772,24 @@ else:
       else:
         result = -1
 
-  proc suspend(p: Process) =
+  proc suspend(p: AsyncProcess) =
     if posix.kill(p.procId, SIGSTOP) != 0'i32:
       raiseOsError(osLastError())
 
-  proc resume(p: Process) =
+  proc resume(p: AsyncProcess) =
     if posix.kill(p.procId, SIGCONT) != 0'i32:
       raiseOsError(osLastError())
 
-  proc terminate(p: Process) =
+  proc terminate(p: AsyncProcess) =
     if posix.kill(p.procId, SIGTERM) != 0'i32:
       raiseOsError(osLastError())
 
-  proc kill(p: Process) =
+  proc kill(p: AsyncProcess) =
     if posix.kill(p.procId, SIGKILL) != 0'i32:
       raiseOsError(osLastError())
 
 when defined(upcoming):
-  proc waitForExit*(p: Process): Future[int] =
+  proc waitForExit*(p: AsyncProcess): Future[int] =
     ## Waits for the process to finish in asynchronous way and returns
     ## exit code.
     ##
