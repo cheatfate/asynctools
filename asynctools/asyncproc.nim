@@ -572,11 +572,11 @@ else:
 
     when useProcessAuxSpawn:
       let currentDir = getCurrentDir()
-      pid = startProcessAuxSpawn(data)
+      pid = startProcessAuxSpawn(sd)
       if workingDir.len > 0:
         setCurrentDir(currentDir)
     else:
-      pid = startProcessAuxFork(data)
+      pid = startProcessAuxFork(sd)
 
     # Parent process. Copy process information.
     if poEchoCmd in options:
@@ -615,10 +615,10 @@ else:
         chck posix_spawn_file_actions_addclose(fops, data.pStdout[readIdx])
         chck posix_spawn_file_actions_adddup2(fops, data.pStdout[writeIdx],
                                               writeIdx)
-        chck posix_spawn_file_actions_addclose(fops, data.pStderr[readIdx])
         if data.optionPoStdErrToStdOut:
           chck posix_spawn_file_actions_adddup2(fops, data.pStdout[writeIdx], 2)
         else:
+          chck posix_spawn_file_actions_addclose(fops, data.pStderr[readIdx])
           chck posix_spawn_file_actions_adddup2(fops, data.pStderr[writeIdx], 2)
 
       var res: cint
