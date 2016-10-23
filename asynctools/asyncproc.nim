@@ -794,7 +794,7 @@ else:
     if posix.kill(p.procId, SIGKILL) != 0'i32:
       raiseOsError(osLastError())
 
-when defined(upcoming):
+when declared(addProcess):
   proc waitForExit*(p: AsyncProcess): Future[int] =
     ## Waits for the process to finish in asynchronous way and returns
     ## exit code.

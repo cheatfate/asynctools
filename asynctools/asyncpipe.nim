@@ -139,15 +139,12 @@ else:
       DEFAULT_PIPE_SIZE = 65536'i32
       FILE_FLAG_FIRST_PIPE_INSTANCE = 0x00080000'i32
       PIPE_WAIT = 0x00000000'i32
-      #PIPE_TYPE_BYTE = 0x00000000'i32
-      #PIPE_READMODE_BYTE = 0x00000000'i32
-      PIPE_TYPE_MESSAGE = 0x00000004'i32
-      PIPE_READMODE_MESSAGE = 0x00000002'i32
+      PIPE_TYPE_BYTE = 0x00000000'i32
+      PIPE_READMODE_BYTE = 0x00000000'i32
       ERROR_PIPE_CONNECTED = 535
       ERROR_PIPE_BUSY = 231
       ERROR_BROKEN_PIPE = 109
       ERROR_PIPE_NOT_CONNECTED = 233
-      #ERROR_NO_DATA = 232
 
     proc `$`*(pipe: AsyncPipe): string =
       result = "AsyncPipe [read = " & $(cast[uint](pipe.readPipe)) &
@@ -167,7 +164,7 @@ else:
         pipeName = newWideCString(p)
         var openMode = FILE_FLAG_FIRST_PIPE_INSTANCE or FILE_FLAG_OVERLAPPED or
                        PIPE_ACCESS_INBOUND
-        var pipeMode = PIPE_TYPE_MESSAGE or PIPE_READMODE_MESSAGE or PIPE_WAIT
+        var pipeMode = PIPE_TYPE_BYTE or PIPE_READMODE_BYTE or PIPE_WAIT
         pipeIn = createNamedPipe(pipeName, openMode, pipeMode, 1'i32,
                                  DEFAULT_PIPE_SIZE, DEFAULT_PIPE_SIZE,
                                  1'i32, addr sa)
@@ -178,7 +175,8 @@ else:
         else:
           break
 
-      pipeOut = createFileW(pipeName, GENERIC_WRITE, 0, addr(sa), OPEN_EXISTING,
+      var openMode = (FILE_WRITE_DATA or SYNCHRONIZE)
+      pipeOut = createFileW(pipeName, openMode, 0, addr(sa), OPEN_EXISTING,
                             FILE_FLAG_OVERLAPPED, 0)
       if pipeOut == INVALID_HANDLE_VALUE:
         let err = osLastError()
