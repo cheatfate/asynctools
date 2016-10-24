@@ -109,6 +109,9 @@ when defined(nimdoc):
   proc asyncUnwrap*(pipe: AsyncPipe) =
     ## Unregisters ``pipe`` handle from current async dispatcher.
 
+  proc `$`*(pipe: AsyncPipe) =
+    ## Returns string representation of ``AsyncPipe`` object.
+
 else:
 
   when defined(windows):
