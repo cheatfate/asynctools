@@ -14,4 +14,8 @@ Asynchronous process manipulation facility with asynchronous pipes as standart i
 Asynchronous DNS resolver, using default libresolv/libbind on Linux/BSD/MacOS/Solaris, and dnsapi.dll on Windows.
 
 ### asyncpty.nim
+<<<<<<< HEAD
 Asynchronous PTY communication.
+=======
+Asynchronous PTY communication.
+>>>>>>> 0d7157c1e083e9b630447f678fe728fe359d371b
