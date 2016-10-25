@@ -3,23 +3,23 @@ Various asynchronous modules for Nim Language [http://www.nim-lang.org](http://n
 
 ## Main features
 
-**asyncpipe.nim**
+[**asyncpipe.nim**](asynctools/asyncpipe.nim)
 
 Asynchronous pipes, using non-blocking pipe(3) on Linux/BSD/MacOS/Solaris and named pipes on Windows.
 
-**asyncpipe.nim**
+[**asyncipc.nim**](asynctools/asyncipc.nim)
 
 Asynchronous inter-process communication, using non-blocking mkfifo(3) on Linux/BSD/MacOS/Solaris and named memory maps on Windows.
 
-**asyncpipe.nim**
+[**asyncproc.nim**](asynctools/asyncproc.nim)
 
-Asynchronous process manipulation facility with asynchronous pipes as standart input/output/error handles, and asynchronous 
+Asynchronous process manipulation facility with asynchronous pipes as standart input/output/error handles, and asynchronous.
 
-**asyncpipe.nim**
+[**asyncdns.nim**](asynctools/asyncdns.nim)
 
 Asynchronous DNS resolver, using default libresolv/libbind on Linux/BSD/MacOS/Solaris, and default dnsapi.dll on Windows.
 
-**asyncpipe.nim**
+[**asyncpty.nim**](asynctools/asyncpty.nim)
 
 Asynchronous PTY communication, using pty mechanism of Linux/BSD/MacOS/Solaris, and named pipes on Windows.
 
@@ -37,7 +37,7 @@ $ nimble install https://github.com/cheatfate/asynctools.git
 
 ## Documentation
 
-Every module have documentation inside, you can get it via
+Every module have documentation inside, you can obtain it via
 
 ```
 $ nim doc <modulename>
