@@ -206,6 +206,10 @@ proc kill*(p: AsyncProcess)
 proc running*(p: AsyncProcess): bool
   ## Returns `true` if the process ``p`` is still running. Returns immediately.
 
+proc peekExitCode*(p: AsyncProcess): int
+  ## Returns `-1` if the process is still running. Otherwise the
+  ## process' exit code.
+
 proc processID*(p: AsyncProcess): int =
   ## Returns process ``p`` id.
   return p.procId
