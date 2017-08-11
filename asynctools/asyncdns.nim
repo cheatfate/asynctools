@@ -727,25 +727,26 @@ else:
 proc free*(aip: ptr AsyncAddrInfo) =
   dealloc(cast[pointer](aip))
 
-echo "=== synchronous variant"
-var saiList = getAddrInfo("www.google.com", Port(80), domain = Domain.AF_INET)
-var it = saiList
-while not it.isNil:
-  echo $it
-  it = it.ai_next
+when isMainModule:
+  echo "=== synchronous variant"
+  var saiList = getAddrInfo("www.google.com", Port(80), domain = Domain.AF_INET)
+  var it = saiList
+  while not it.isNil:
+    echo $it
+    it = it.ai_next
 
-echo "=== asynchronous variant"
+  echo "=== asynchronous variant"
 
-var aiList = waitFor(asyncGetAddrInfo("www.google.com", Port(80), domain = Domain.AF_INET))
-var ait = aiList
-while not ait.isNil:
-  echo $ait
-  ait = cast[ptr AsyncAddrInfo](cast[ptr AddrInfo](ait).ai_next)
+  var aiList = waitFor(asyncGetAddrInfo("www.google.com", Port(80), domain = Domain.AF_INET))
+  var ait = aiList
+  while not ait.isNil:
+    echo $ait
+    ait = cast[ptr AsyncAddrInfo](cast[ptr AddrInfo](ait).ai_next)
 
-if saiList == aiList:
-  echo "RESULTS EQUAL"
-else:
-  echo "RESULTS NOT EQUAL"
+  if saiList == aiList:
+    echo "RESULTS EQUAL"
+  else:
+    echo "RESULTS NOT EQUAL"
 
-free(aiList)
-freeaddrinfo(saiList)
+  free(aiList)
+  freeaddrinfo(saiList)
