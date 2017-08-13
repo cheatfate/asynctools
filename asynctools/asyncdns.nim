@@ -71,20 +71,20 @@ proc `==`*(ai1: ptr AddrInfo|ptr AsyncAddrInfo,
   var saiLength = 0
   var daiLength = 0
   var rec = sai
-  while rec != nil:
+  while not rec.isNil:
     inc(saiLength)
     rec = rec.ai_next
   rec = dai
-  while rec != nil:
+  while not rec.isNil:
     inc(daiLength)
     rec = rec.ai_next
 
   if saiLength == daiLength:
     var srec = sai
-    while srec != nil:
+    while not srec.isNil:
       result = false
       var drec = dai
-      while drec != nil:
+      while not drec.isNil:
         if srec.ai_family == drec.ai_family and
            srec.ai_socktype == drec.ai_socktype and
            srec.ai_protocol == drec.ai_protocol and
@@ -727,25 +727,26 @@ else:
 proc free*(aip: ptr AsyncAddrInfo) =
   dealloc(cast[pointer](aip))
 
-echo "=== synchronous variant"
-var saiList = getAddrInfo("www.google.com", Port(80), domain = Domain.AF_INET)
-var it = saiList
-while it != nil:
-  echo $it
-  it = it.ai_next
+when isMainModule:
+  echo "=== synchronous variant"
+  var saiList = getAddrInfo("www.google.com", Port(80), domain = Domain.AF_INET)
+  var it = saiList
+  while not it.isNil:
+    echo $it
+    it = it.ai_next
 
-echo "=== asynchronous variant"
+  echo "=== asynchronous variant"
 
-var aiList = waitFor(asyncGetAddrInfo("www.google.com", Port(80), domain = Domain.AF_INET))
-var ait = aiList
-while ait != nil:
-  echo $ait
-  ait = cast[ptr AsyncAddrInfo](cast[ptr AddrInfo](ait).ai_next)
+  var aiList = waitFor(asyncGetAddrInfo("www.google.com", Port(80), domain = Domain.AF_INET))
+  var ait = aiList
+  while not ait.isNil:
+    echo $ait
+    ait = cast[ptr AsyncAddrInfo](cast[ptr AddrInfo](ait).ai_next)
 
-if saiList == aiList:
-  echo "RESULTS EQUAL"
-else:
-  echo "RESULTS NOT EQUAL"
+  if saiList == aiList:
+    echo "RESULTS EQUAL"
+  else:
+    echo "RESULTS NOT EQUAL"
 
-free(aiList)
-freeaddrinfo(saiList)
+  free(aiList)
+  freeaddrinfo(saiList)
