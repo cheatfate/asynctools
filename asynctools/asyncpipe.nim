@@ -279,15 +279,6 @@ else:
           if errcode.int32 != ERROR_IO_PENDING:
             GC_unref(ol)
             retFuture.fail(newException(OSError, osErrorMsg(errcode)))
-        else:
-          var bytesWrote = 0.Dword
-          if getOverlappedResult(pipe.writePipe, cast[POVERLAPPED](ol),
-                                 bytesWrote, Winbool(false)) == 0:
-            GC_unref(ol)
-            retFuture.fail(newException(OSError, osErrorMsg(osLastError())))
-          else:
-            assert bytesWrote == nbytes
-            retFuture.complete(bytesWrote)
       return retFuture
 
     proc readInto*(pipe: AsyncPipe, data: pointer, nbytes: int): Future[int] =
@@ -322,20 +313,6 @@ else:
           elif err.int32 != ERROR_IO_PENDING:
             GC_unref(ol)
             retFuture.fail(newException(OSError, osErrorMsg(err)))
-        else:
-          var bytesRead = 0.DWord
-          if getOverlappedResult(pipe.readPipe, cast[POverlapped](ol),
-                                 bytesRead, Winbool(false)) == 0:
-            let errcode = osLastError()
-            if errcode.int32 in {ERROR_BROKEN_PIPE, ERROR_PIPE_NOT_CONNECTED}:
-              GC_unref(ol)
-              retFuture.complete(0)
-            else:
-              GC_unref(ol)
-              retFuture.fail(newException(OSError, osErrorMsg(errcode)))
-          else:
-            assert(bytesRead > 0 and bytesRead <= nbytes)
-            retFuture.complete(bytesRead)
       return retFuture
   else:
 
