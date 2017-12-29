@@ -830,6 +830,9 @@ proc execProcess(command: string, args: seq[string] = @[],
     else:
       break
   result.exitcode = p.peekExitCode()
+  while result.exitcode == -1:
+    await sleepAsync(20)
+    result.exitcode = p.peekExitCode()
   close(p)
 
 when isMainModule:
