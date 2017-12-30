@@ -21,6 +21,7 @@ import asyncdispatch, asyncpipe
 when defined(windows):
   import winlean
 else:
+  const STILL_ACTIVE = 259
   import posix
 
 when defined(linux):
@@ -56,7 +57,7 @@ type
       isWow64: bool
     else:
       procId: Pid
-      isExit: bool
+    isExit: bool
     exitCode: cint
     options: set[ProcessOption]
 
@@ -136,12 +137,12 @@ proc execProcess*(command: string, args: seq[string] = @[],
   ##  echo "process output = " & outp.output
 
 proc startProcess*(command: string, workingDir: string = "",
-                     args: openArray[string] = [],
-                     env: StringTableRef = nil,
-                     options: set[ProcessOption] = {poStdErrToStdOut},
-                     pipeStdin: AsyncPipe = nil,
-                     pipeStdout: AsyncPipe = nil,
-                     pipeStderr: AsyncPipe = nil): AsyncProcess
+                   args: openArray[string] = [],
+                   env: StringTableRef = nil,
+                   options: set[ProcessOption] = {poStdErrToStdOut},
+                   pipeStdin: AsyncPipe = nil,
+                   pipeStdout: AsyncPipe = nil,
+                   pipeStderr: AsyncPipe = nil): AsyncProcess
   ## Starts a process.
   ##
   ## ``command`` is the executable file path
@@ -207,8 +208,8 @@ proc running*(p: AsyncProcess): bool
   ## Returns `true` if the process ``p`` is still running. Returns immediately.
 
 proc peekExitCode*(p: AsyncProcess): int
-  ## Returns `-1` if the process is still running. Otherwise the
-  ## process' exit code.
+  ## Returns `STILL_ACTIVE` if the process is still running.
+  ## Otherwise the process' exit code.
 
 proc processID*(p: AsyncProcess): int =
   ## Returns process ``p`` id.
@@ -225,6 +226,10 @@ proc outputHandle*(p: AsyncProcess): AsyncPipe {.inline.} =
 proc errorHandle*(p: AsyncProcess): AsyncPipe {.inline.} =
   ## Returns ``AsyncPipe`` handle to ``STDERR`` pipe of process ``p``.
   result = p.errPipe
+
+proc waitForExit*(p: AsyncProcess): Future[int]
+  ## Waits for the process to finish in asynchronous way and returns
+  ## exit code.
 
 when defined(windows):
 
@@ -275,7 +280,7 @@ when defined(windows):
       si: STARTUPINFO
       procInfo: PROCESS_INFORMATION
 
-    result = AsyncProcess(options: options)
+    result = AsyncProcess(options: options, isExit: true)
     si.cb = sizeof(STARTUPINFO).cint
 
     if not isNil(pipeStdin):
@@ -408,6 +413,8 @@ when defined(windows):
       else:
         result.isWow64 = false
 
+      result.isExit = false
+
       if poParentStreams notin options:
         closeRead(result.inPipe)
         closeWrite(result.outPipe)
@@ -435,6 +442,9 @@ when defined(windows):
     else:
       if value == STILL_ACTIVE:
         result = true
+      else:
+        p.isExit = true
+        p.exitCode = value
 
   proc terminate(p: AsyncProcess) =
     if running(p):
@@ -444,20 +454,46 @@ when defined(windows):
     terminate(p)
 
   proc peekExitCode(p: AsyncProcess): int =
-    var value = 0'i32
-    let res = getExitCodeProcess(p.fProcessHandle, value)
-    if res == 0:
-      raiseOsError(osLastError())
+    if p.isExit:
+      result = p.exitCode
     else:
-      if value == STILL_ACTIVE:
-        result = -1
+      var value = 0'i32
+      let res = getExitCodeProcess(p.fProcessHandle, value)
+      if res == 0:
+        raiseOsError(osLastError())
       else:
         result = value
+        if value != STILL_ACTIVE:
+          p.isExit = true
+          p.exitCode = value
+
+  when declared(addProcess):
+    proc waitForExit(p: AsyncProcess): Future[int] =
+      var retFuture = newFuture[int]("asyncproc.waitForExit")
+
+      proc cb(fd: AsyncFD): bool =
+        var value = 0'i32
+        let res = getExitCodeProcess(p.fProcessHandle, value)
+        if res == 0:
+          retFuture.fail(newException(OSError, osErrorMsg(osLastError())))
+        else:
+          p.isExit = true
+          p.exitCode = value
+          retFuture.complete(p.exitCode)
+
+      if p.isExit:
+        retFuture.complete(p.exitCode)
+      else:
+        addProcess(p.procId, cb)
+      return retFuture
 
 else:
   const
     readIdx = 0
     writeIdx = 1
+
+  template statusToExitCode(status): int32 =
+    (status and 0xFF00) shr 8
 
   proc envToCStringArray(t: StringTableRef): cstringArray =
     result = cast[cstringArray](alloc0((t.len + 1) * sizeof(cstring)))
@@ -485,9 +521,7 @@ else:
     sysEnv: cstringArray
     workingDir: cstring
     pStdin, pStdout, pStderr, pErrorPipe: array[0..1, cint]
-    optionPoUsePath: bool
-    optionPoParentStreams: bool
-    optionPoStdErrToStdOut: bool
+    options: set[ProcessOption]
 
   const useProcessAuxSpawn = declared(posix_spawn) and not defined(useFork) and
                              not defined(useClone) and not defined(linux)
@@ -498,10 +532,10 @@ else:
     proc startProcessAuxFork(data: StartProcessData): Pid {.
       tags: [ExecIOEffect, ReadEnvEffect], gcsafe.}
 
-  {.push stacktrace: off, profiler: off.}
-  proc startProcessAfterFork(data: ptr StartProcessData) {.
-    tags: [ExecIOEffect, ReadEnvEffect], cdecl, gcsafe.}
-  {.pop.}
+    {.push stacktrace: off, profiler: off.}
+    proc startProcessAfterFork(data: ptr StartProcessData) {.
+      tags: [ExecIOEffect, ReadEnvEffect], cdecl, gcsafe.}
+    {.pop.}
 
   proc startProcess(command: string, workingDir: string = "",
                     args: openArray[string] = [],
@@ -512,7 +546,7 @@ else:
                     pipeStderr: AsyncPipe = nil): AsyncProcess =
     var sd = StartProcessData()
 
-    result = AsyncProcess(options: options)
+    result = AsyncProcess(options: options, isExit: true)
 
     if not isNil(pipeStdin):
       sd.pStdin = pipeStdin.getHandles()
@@ -569,9 +603,7 @@ else:
     sd.sysCommand = sysCommand
     sd.sysArgs = sysArgs
     sd.sysEnv = sysEnv
-    sd.optionPoParentStreams = poParentStreams in options
-    sd.optionPoUsePath = poUsePath in options
-    sd.optionPoStdErrToStdOut = poStdErrToStdOut in options
+    sd.options = options
     sd.workingDir = workingDir
 
     when useProcessAuxSpawn:
@@ -587,6 +619,8 @@ else:
       echo(command, " ", join(args, " "))
     result.procId = pid
 
+    result.isExit = false
+
     if poParentStreams notin options:
       closeRead(result.inPipe)
       closeWrite(result.outPipe)
@@ -597,7 +631,7 @@ else:
       var attr: Tposix_spawnattr
       var fops: Tposix_spawn_file_actions
 
-      template chck(e: expr) =
+      template chck(e: untyped) =
         if e != 0'i32: raiseOSError(osLastError())
 
       chck posix_spawn_file_actions_init(fops)
@@ -606,20 +640,22 @@ else:
       var mask: Sigset
       chck sigemptyset(mask)
       chck posix_spawnattr_setsigmask(attr, mask)
-      chck posix_spawnattr_setpgroup(attr, 0'i32)
 
-      chck posix_spawnattr_setflags(attr, POSIX_SPAWN_USEVFORK or
-                                          POSIX_SPAWN_SETSIGMASK or
-                                          POSIX_SPAWN_SETPGROUP)
+      var flags = POSIX_SPAWN_USEVFORK or POSIX_SPAWN_SETSIGMASK
+      if poDemon in data.options:
+        flags = flags or POSIX_SPAWN_SETPGROUP
+        chck posix_spawnattr_setpgroup(attr, 0'i32)
 
-      if not data.optionPoParentStreams:
+      chck posix_spawnattr_setflags(attr, flags)
+
+      if not (poParentStreams in data.options):
         chck posix_spawn_file_actions_addclose(fops, data.pStdin[writeIdx])
         chck posix_spawn_file_actions_adddup2(fops, data.pStdin[readIdx],
                                               readIdx)
         chck posix_spawn_file_actions_addclose(fops, data.pStdout[readIdx])
         chck posix_spawn_file_actions_adddup2(fops, data.pStdout[writeIdx],
                                               writeIdx)
-        if data.optionPoStdErrToStdOut:
+        if (poStdErrToStdOut in data.options):
           chck posix_spawn_file_actions_adddup2(fops, data.pStdout[writeIdx], 2)
         else:
           chck posix_spawn_file_actions_addclose(fops, data.pStderr[readIdx])
@@ -630,7 +666,7 @@ else:
         setCurrentDir($data.workingDir)
       var pid: Pid
 
-      if data.optionPoUsePath:
+      if (poUsePath in data.options):
         res = posix_spawnp(pid, data.sysCommand, fops, attr, data.sysArgs,
                            data.sysEnv)
       else:
@@ -680,70 +716,74 @@ else:
                      [$data.sysCommand, $strerror(error)])
       return pid
 
-  {.push stacktrace: off, profiler: off.}
-  proc startProcessFail(data: ptr StartProcessData) =
-    var error: cint = errno
-    discard write(data.pErrorPipe[writeIdx], addr error, sizeof(error))
-    exitnow(1)
+    {.push stacktrace: off, profiler: off.}
+    proc startProcessFail(data: ptr StartProcessData) =
+      var error: cint = errno
+      discard write(data.pErrorPipe[writeIdx], addr error, sizeof(error))
+      exitnow(1)
 
-  when not defined(uClibc) and (not defined(linux) or defined(android)):
-    var environ {.importc.}: cstringArray
+    when not defined(uClibc) and (not defined(linux) or defined(android)):
+      var environ {.importc.}: cstringArray
 
-  proc startProcessAfterFork(data: ptr StartProcessData) =
-    # Warning: no GC here!
-    # Or anything that touches global structures - all called nim procs
-    # must be marked with stackTrace:off. Inspect C code after making changes.
-    if not data.optionPoParentStreams:
-      if posix.close(data.pStdin[writeIdx]) != 0:
-        startProcessFail(data)
-
-      if dup2(data.pStdin[readIdx], readIdx) < 0:
-        startProcessFail(data)
-
-      if posix.close(data.pStdout[readIdx]) != 0:
-        startProcessFail(data)
-
-      if dup2(data.pStdout[writeIdx], writeIdx) < 0:
-        startProcessFail(data)
-
-      if data.optionPoStdErrToStdOut:
-        if dup2(data.pStdout[writeIdx], 2) < 0:
+    proc startProcessAfterFork(data: ptr StartProcessData) =
+      # Warning: no GC here!
+      # Or anything that touches global structures - all called nim procs
+      # must be marked with stackTrace:off. Inspect C code after making changes.
+      if (poDemon in data.options):
+        if posix.setpgid(Pid(0), Pid(0)) != 0:
           startProcessFail(data)
+
+      if not (poParentStreams in data.options):
+        if posix.close(data.pStdin[writeIdx]) != 0:
+          startProcessFail(data)
+
+        if dup2(data.pStdin[readIdx], readIdx) < 0:
+          startProcessFail(data)
+
+        if posix.close(data.pStdout[readIdx]) != 0:
+          startProcessFail(data)
+
+        if dup2(data.pStdout[writeIdx], writeIdx) < 0:
+          startProcessFail(data)
+
+        if (poStdErrToStdOut in data.options):
+          if dup2(data.pStdout[writeIdx], 2) < 0:
+            startProcessFail(data)
+        else:
+          if posix.close(data.pStderr[readIdx]) != 0:
+            startProcessFail(data)
+
+          if dup2(data.pStderr[writeIdx], 2) < 0:
+            startProcessFail(data)
+
+      if data.workingDir.len > 0:
+        if chdir(data.workingDir) < 0:
+          startProcessFail(data)
+
+      if posix.close(data.pErrorPipe[readIdx]) != 0:
+        startProcessFail(data)
+
+      discard fcntl(data.pErrorPipe[writeIdx], F_SETFD, FD_CLOEXEC)
+
+      if (poUsePath in data.options):
+        when defined(uClibc):
+          # uClibc environment (OpenWrt included) doesn't have the full execvpe
+          discard execve(data.sysCommand, data.sysArgs, data.sysEnv)
+        elif defined(linux) and not defined(android):
+          discard execvpe(data.sysCommand, data.sysArgs, data.sysEnv)
+        else:
+          # MacOSX doesn't have execvpe, so we need workaround.
+          # On MacOSX we can arrive here only from fork, so this is safe:
+          environ = data.sysEnv
+          discard execvp(data.sysCommand, data.sysArgs)
       else:
-        if posix.close(data.pStderr[readIdx]) != 0:
-          startProcessFail(data)
-
-        if dup2(data.pStderr[writeIdx], 2) < 0:
-          startProcessFail(data)
-
-    if data.workingDir.len > 0:
-      if chdir(data.workingDir) < 0:
-        startProcessFail(data)
-
-    if posix.close(data.pErrorPipe[readIdx]) != 0:
-      startProcessFail(data)
-
-    discard fcntl(data.pErrorPipe[writeIdx], F_SETFD, FD_CLOEXEC)
-
-    if data.optionPoUsePath:
-      when defined(uClibc):
-        # uClibc environment (OpenWrt included) doesn't have the full execvpe
         discard execve(data.sysCommand, data.sysArgs, data.sysEnv)
-      elif defined(linux) and not defined(android):
-        discard execvpe(data.sysCommand, data.sysArgs, data.sysEnv)
-      else:
-        # MacOSX doesn't have execvpe, so we need workaround.
-        # On MacOSX we can arrive here only from fork, so this is safe:
-        environ = data.sysEnv
-        discard execvp(data.sysCommand, data.sysArgs)
-    else:
-      discard execve(data.sysCommand, data.sysArgs, data.sysEnv)
 
-    startProcessFail(data)
-  {.pop}
+      startProcessFail(data)
+    {.pop}
 
   proc close(p: AsyncProcess) =
-    # we need to `wait` for process, to avoid `zombie`, so if `running()`
+    ## We need to `wait` for process, to avoid `zombie`, so if `running()`
     ## returns `false`, then process exited and `wait()` was called.
     doAssert(not p.running())
     if p.inPipe != nil: close(p.inPipe)
@@ -764,7 +804,7 @@ else:
       else:
         if WIFEXITED(status) or WIFSIGNALED(status):
           p.isExit = true
-          p.exitCode = (status and 0xFF00) shr 8
+          p.exitCode = statusToExitCode(status)
           result = false
 
   proc peekExitCode(p: AsyncProcess): int =
@@ -777,10 +817,10 @@ else:
         raiseOsError(osLastError())
       elif res > 0:
         p.isExit = true
-        p.exitCode = (status and 0xFF00) shr 8
+        p.exitCode = statusToExitCode(status)
         result = p.exitCode
       else:
-        result = -1
+        result = STILL_ACTIVE
 
   proc suspend(p: AsyncProcess) =
     if posix.kill(p.procId, SIGSTOP) != 0'i32:
@@ -798,25 +838,53 @@ else:
     if posix.kill(p.procId, SIGKILL) != 0'i32:
       raiseOsError(osLastError())
 
-when declared(addProcess):
-  proc waitForExit*(p: AsyncProcess): Future[int] =
-    ## Waits for the process to finish in asynchronous way and returns
-    ## exit code.
-    ##
-    ## **NOTE**: This function available only with upcoming version of
-    ## asyncdispatch.nim.
-    var retFuture = newFuture[int]("asyncproc.waitForExit")
-    proc cb(fd: AsyncFD): bool =
-      retFuture.complete(p.peekExitCode())
-    addProcess(p.procId, cb)
-    return retFuture
+  when declared(addProcess):
+    proc waitForExit*(p: AsyncProcess): Future[int] =
+      var retFuture = newFuture[int]("asyncproc.waitForExit")
+
+      proc cb(fd: AsyncFD): bool =
+        var status = cint(0)
+        let res = posix.waitpid(p.procId, status, WNOHANG)
+        if res <= 0:
+          retFuture.fail(newException(OSError, osErrorMsg(osLastError())))
+        else:
+          p.isExit = true
+          p.exitCode = statusToExitCode(status)
+          retFuture.complete(p.exitCode)
+
+      if p.isExit:
+        retFuture.complete(p.exitCode)
+      else:
+        while true:
+          var status = cint(0)
+          let res = posix.waitpid(p.procId, status, WNOHANG)
+          if res < 0:
+            retFuture.fail(newException(OSError, osErrorMsg(osLastError())))
+            break
+          elif res > 0:
+            p.isExit = true
+            p.exitCode = statusToExitCode(status)
+            retFuture.complete(p.exitCode)
+            break
+          else:
+            try:
+              addProcess(p.procId, cb)
+              break
+            except:
+              let err = osLastError()
+              if cint(err) == ESRCH:
+                continue
+              else:
+                retFuture.fail(newException(OSError, osErrorMsg(err)))
+                break
+      return retFuture
 
 proc execProcess(command: string, args: seq[string] = @[],
                  env: StringTableRef = nil,
                  options: set[ProcessOption] = {poStdErrToStdOut, poUsePath,
                                                 poEvalCommand}
                 ): Future[tuple[exitcode: int, output: string]] {.async.} =
-  result = (exitcode: -1, output: "")
+  result = (exitcode: int(STILL_ACTIVE), output: "")
   let bufferSize = 1024
   var data = newStringOfCap(bufferSize)
   var p = startProcess(command, args = args, env = env, options = options)
@@ -829,7 +897,7 @@ proc execProcess(command: string, args: seq[string] = @[],
       data.setLen(bufferSize)
     else:
       break
-  result.exitcode = p.peekExitCode()
+  result.exitcode = await p.waitForExit()
   close(p)
 
 when isMainModule:
