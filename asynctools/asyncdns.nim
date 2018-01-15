@@ -39,13 +39,13 @@ proc `$`*(aip: ptr AddrInfo|ptr AsyncAddrInfo): string =
   if ai.ai_family == toInt(Domain.AF_INET6):
     let p = cast[ptr Sockaddr_in6](ai.ai_addr)
     nport = p.sin6_port
-    hport = ntohs(nport)
+    hport = nativesockets.ntohs(nport)
     discard inet_ntop(ai.ai_family, cast[pointer](addr p.sin6_addr),
                       cstring(address), len(address).int32)
   else:
     let p = cast[ptr Sockaddr_in](ai.ai_addr)
     nport = p.sin_port
-    hport = ntohs(nport)
+    hport = nativesockets.ntohs(nport)
     discard inet_ntop(ai.ai_family, cast[pointer](addr p.sin_addr),
                       cstring(address), len(address).int32)
   result &= "ai_flags = 0x" & toHex(cast[int32](ai.ai_flags)) & "\n"
@@ -244,11 +244,11 @@ when defined(windows):
 
       # This is emulation of windns.h DNS_BYTE_FLIP_HEADER_COUNTS macro.
       var header = cast[ptr DNS_HEADER](addr response[0])
-      header.Xid = ntohs(header.Xid)
-      header.QuestionCount = ntohs(header.QuestionCount)
-      header.AnswerCount = ntohs(header.AnswerCount)
-      header.NameServerCount = ntohs(header.NameServerCount)
-      header.AdditionalCount = ntohs(header.AdditionalCount)
+      header.Xid = nativesockets.ntohs(header.Xid)
+      header.QuestionCount = nativesockets.ntohs(header.QuestionCount)
+      header.AnswerCount = nativesockets.ntohs(header.AnswerCount)
+      header.NameServerCount = nativesockets.ntohs(header.NameServerCount)
+      header.AdditionalCount = nativesockets.ntohs(header.AdditionalCount)
 
       if header.Xid != xid:
         nsLastError = DNS_ERROR_WRONG_XID
