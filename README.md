@@ -23,6 +23,10 @@ Asynchronous DNS resolver, using default libresolv/libbind on Linux/BSD/MacOS/So
 
 Asynchronous PTY communication, using pty mechanism of Linux/BSD/MacOS/Solaris, and named pipes on Windows.
 
+[**asyncsync.nim**](asynctools/asyncsync.nim)
+
+Asynchronous synchronization primitives, such as Queue, Lock and Event.
+
 ## Installation
 
 The most recent version of the modules can be installed directly from GitHub repository
