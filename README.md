@@ -5,7 +5,7 @@ Various asynchronous modules for Nim Language [http://www.nim-lang.org](http://n
 
 [**asyncpipe.nim**](asynctools/asyncpipe.nim)
 
-Asynchronous pipes, using non-blocking pipe(3) on Linux/BSD/MacOS/Solaris and named pipes on Windows.
+Asynchronous pipes, using non-blocking pipe(2) on Linux/BSD/MacOS/Solaris and named pipes on Windows.
 
 [**asyncipc.nim**](asynctools/asyncipc.nim)
 
