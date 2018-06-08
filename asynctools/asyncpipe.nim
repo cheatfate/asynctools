@@ -117,8 +117,6 @@ else:
   when defined(windows):
     import winlean
   else:
-    when defined(linux):
-      import linux
     import posix
 
   type
@@ -333,16 +331,10 @@ else:
 
     proc createPipe*(size = 65536, register = true): AsyncPipe =
       var fds: array[2, cint]
-      when defined(linux):
-        # pipe2 syscall was added in 2.6.27, it allows to create atomically set
-        # the O_NONBLOCK flag.
-        if linux.pipe2(fds, O_NONBLOCK) == -1:
-          raiseOSError(osLastError())
-      else:
-        if posix.pipe(fds) == -1:
-          raiseOSError(osLastError())
-        setNonBlocking(fds[0])
-        setNonBlocking(fds[1])
+      if posix.pipe(fds) == -1:
+        raiseOSError(osLastError())
+      setNonBlocking(fds[0])
+      setNonBlocking(fds[1])
 
       result = AsyncPipe(readPipe: fds[0], writePipe: fds[1])
 
