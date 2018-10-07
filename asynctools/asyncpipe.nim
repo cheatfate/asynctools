@@ -450,7 +450,6 @@ proc write*(pipe: AsyncPipe, data: string): Future[int] =
   ## pipe ``pipe``.
   pipe.write(unsafeAddr data[0], data.len)
 
-
 proc read*(pipe: AsyncPipe): Future[string] {.async.} =
   ## This procedure reads an string out of the ``pipe``.
   ## Returns when pipe closes.
@@ -461,7 +460,6 @@ proc read*(pipe: AsyncPipe): Future[string] {.async.} =
       break
     buffer.setLen(bytesReady)
     result.add buffer
-
 
 when isMainModule:
 
