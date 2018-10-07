@@ -658,7 +658,7 @@ else:
             psin_len[] = cast[uint8](sizeof(Sockaddr_in))
 
           var addrp = cast[ptr Sockaddr_in](addr sockArr[ai])
-          addrp.sin_family = toInt(domain)
+          addrp.sin_family = uint16 toInt(domain)
           addrp.sin_port = nativesockets.ntohs(cast[uint16](port))
           copyMem(addr addrp.sin_addr, record.rdata, 4)
           if k + 1 < count:
@@ -678,7 +678,7 @@ else:
             psin_len[] = cast[uint8](sizeof(Sockaddr_in6))
 
           var addrp = cast[ptr Sockaddr_in6](addr sockArr[ai])
-          addrp.sin6_family = toInt(domain)
+          addrp.sin6_family = uint16 toInt(domain)
           addrp.sin6_port = nativesockets.ntohs(cast[uint16](port))
           copyMem(addr addrp.sin6_addr, record.rdata, 4 * 4)
           if k + 1 < count:
