@@ -443,6 +443,24 @@ else:
           addRead(AsyncFD(pipe.readPipe), cb)
       return retFuture
 
+# high level methods that wrap both win and linux low level methods
+
+proc write*(pipe: AsyncPipe, data: string): Future[int] =
+  ## This procedure writes an string ``data``to the
+  ## pipe ``pipe``.
+  pipe.write(unsafeAddr data[0], data.len)
+
+proc read*(pipe: AsyncPipe): Future[string] {.async.} =
+  ## This procedure reads an string out of the ``pipe``.
+  ## Returns when pipe closes.
+  var buffer = newString(1024*4)
+  while true:
+    var bytesReady = await pipe.readInto(unsafeAddr buffer[0], buffer.len)
+    if bytesReady <= 0:
+      break
+    buffer.setLen(bytesReady)
+    result.add buffer
+
 when isMainModule:
 
   when not defined(windows):
@@ -529,4 +547,5 @@ when isMainModule:
     let res = waitFor(receiver(o))
     doAssert(res.count == testsCount)
     doAssert(res.sum == testsCount * (1 + testsCount) div 2)
+
 

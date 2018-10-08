@@ -8,9 +8,9 @@
 #
 
 ## This module implements asynchronous DNS resolve mechanism.
-## 
+##
 ## asyncGetAddrInfo() don't have support for `flags` argument.
-## 
+##
 ## Supported platforms: Linux, Windows, MacOS, FreeBSD, NetBSD, OpenBSD(*),
 ## Solaris.
 ##
@@ -297,7 +297,7 @@ when defined(windows):
             addrArr[ai].ai_addrlen = sizeof(Sockaddr_in)
             addrArr[ai].ai_addr = addr sockArr[ai]
             var addrp = cast[ptr Sockaddr_in](addr sockArr[ai])
-            addrp.sin_family = toInt(domain).int16
+            addrp.sin_family = toInt(domain).uint16
             addrp.sin_port = nativesockets.ntohs(cast[uint16](port))
             copyMem(addr addrp.sin_addr, addr rec.data, 4)
             if k + 1 < count:
@@ -310,7 +310,7 @@ when defined(windows):
             addrArr[ai].ai_addrlen = sizeof(Sockaddr_in6)
             addrArr[ai].ai_addr = addr sockArr[ai]
             var addrp = cast[ptr Sockaddr_in6](addr sockArr[ai])
-            addrp.sin6_family = toInt(domain).int16
+            addrp.sin6_family = toInt(domain).uint16
             addrp.sin6_port = nativesockets.ntohs(cast[uint16](port))
             copyMem(addr addrp.sin6_addr, addr rec.data, 4 * 4)
             if k + 1 < count:
@@ -658,7 +658,7 @@ else:
             psin_len[] = cast[uint8](sizeof(Sockaddr_in))
 
           var addrp = cast[ptr Sockaddr_in](addr sockArr[ai])
-          addrp.sin_family = toInt(domain)
+          addrp.sin_family = toInt(domain).uint16
           addrp.sin_port = nativesockets.ntohs(cast[uint16](port))
           copyMem(addr addrp.sin_addr, record.rdata, 4)
           if k + 1 < count:
@@ -678,7 +678,7 @@ else:
             psin_len[] = cast[uint8](sizeof(Sockaddr_in6))
 
           var addrp = cast[ptr Sockaddr_in6](addr sockArr[ai])
-          addrp.sin6_family = toInt(domain)
+          addrp.sin6_family = toInt(domain).uint16
           addrp.sin6_port = nativesockets.ntohs(cast[uint16](port))
           copyMem(addr addrp.sin6_addr, record.rdata, 4 * 4)
           if k + 1 < count:
