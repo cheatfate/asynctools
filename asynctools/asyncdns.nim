@@ -8,9 +8,9 @@
 #
 
 ## This module implements asynchronous DNS resolve mechanism.
-## 
+##
 ## asyncGetAddrInfo() don't have support for `flags` argument.
-## 
+##
 ## Supported platforms: Linux, Windows, MacOS, FreeBSD, NetBSD, OpenBSD(*),
 ## Solaris.
 ##
@@ -22,7 +22,6 @@ const
   PACKETSZ = 512
 
 type
-  uncheckedArray {.unchecked.} [T] = array[0..100_000, T]
   AsyncAddrInfo* = distinct AddrInfo
 
 when defined(windows):
@@ -150,7 +149,7 @@ when defined(windows):
   proc QueryPerformanceCounter(res: var int64)
        {.importc: "QueryPerformanceCounter", stdcall, dynlib: "kernel32".}
 
-  proc getDnsServersList(): ptr uncheckedArray[int32] =
+  proc getDnsServersList(): ptr UncheckedArray[int32] =
     var buffer: pointer = nil
     var buflen = 0.Dword
     let res = dnsQueryConfig(DnsConfigDnsServerList, 0, nil, nil, buffer,
@@ -160,13 +159,13 @@ when defined(windows):
       let sres = dnsQueryConfig(DnsConfigDnsServerList, 0, nil, nil, buffer,
                                addr buflen)
       if sres == 0:
-        result = cast[ptr uncheckedArray[int32]](buffer)
+        result = cast[ptr UncheckedArray[int32]](buffer)
       else:
         raiseOsError(osLastError())
     else:
       raiseOsError(osLastError())
 
-  proc freeDnsServersList(arr: ptr uncheckedArray[int32]) =
+  proc freeDnsServersList(arr: ptr UncheckedArray[int32]) =
     dealloc(cast[pointer](arr))
 
   proc getXid(): Word =
@@ -281,8 +280,8 @@ when defined(windows):
       let p0 = blob
       let p1 = cast[pointer](cast[uint](blob) +
                              cast[uint](sizeof(AddrInfo) * count))
-      var addrArr = cast[ptr uncheckedArray[AddrInfo]](p0)
-      var sockArr = cast[ptr uncheckedArray[SockAddr]](p1)
+      var addrArr = cast[ptr UncheckedArray[AddrInfo]](p0)
+      var sockArr = cast[ptr UncheckedArray[SockAddr]](p1)
 
       var k = 0
       rec = records
@@ -577,9 +576,9 @@ else:
     if reqLength <= 0:
       raise newException(ValueError, "Could not create DNS query!")
 
-    let sock = newAsyncNativeSocket(nativesockets.AF_INET,
-                                    nativesockets.SOCK_DGRAM,
-                                    Protocol.IPPROTO_UDP)
+    let sock = createAsyncNativeSocket(nativesockets.AF_INET,
+                                       nativesockets.SOCK_DGRAM,
+                                       Protocol.IPPROTO_UDP)
 
     for i in 0..<3:
       if r.nsaddrList[i].sin_family == 0:
@@ -630,8 +629,8 @@ else:
       let p0 = blob
       let p1 = cast[pointer](cast[uint](blob) +
                              cast[uint](sizeof(AddrInfo) * count))
-      var addrArr = cast[ptr uncheckedArray[AddrInfo]](p0)
-      var sockArr = cast[ptr uncheckedArray[SockAddr]](p1)
+      var addrArr = cast[ptr UncheckedArray[AddrInfo]](p0)
+      var sockArr = cast[ptr UncheckedArray[SockAddr]](p1)
 
       for k in 0..<count:
         var record = nsRr()
@@ -658,7 +657,7 @@ else:
             psin_len[] = cast[uint8](sizeof(Sockaddr_in))
 
           var addrp = cast[ptr Sockaddr_in](addr sockArr[ai])
-          addrp.sin_family = toInt(domain)
+          addrp.sin_family = toInt(domain).uint16
           addrp.sin_port = nativesockets.ntohs(cast[uint16](port))
           copyMem(addr addrp.sin_addr, record.rdata, 4)
           if k + 1 < count:
@@ -678,7 +677,7 @@ else:
             psin_len[] = cast[uint8](sizeof(Sockaddr_in6))
 
           var addrp = cast[ptr Sockaddr_in6](addr sockArr[ai])
-          addrp.sin6_family = toInt(domain)
+          addrp.sin6_family = toInt(domain).uint16
           addrp.sin6_port = nativesockets.ntohs(cast[uint16](port))
           copyMem(addr addrp.sin6_addr, record.rdata, 4 * 4)
           if k + 1 < count:
@@ -721,8 +720,6 @@ else:
         raise newException(ValueError, "No address records for domain!")
       of rtypeError:
         raise newException(ValueError, "Wrong record type in response!")
-      else:
-        raise newException(ValueError, "Unknown error!")
 
 proc free*(aip: ptr AsyncAddrInfo) =
   dealloc(cast[pointer](aip))
