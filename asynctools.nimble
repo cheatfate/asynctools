@@ -1,7 +1,7 @@
 # Package
-version     = "0.1.0"
+version     = "0.1.1"
 author      = "Eugene Kabanov"
 description = "Various asynchronous tools for Nim"
 license     = "MIT"
 # Deps
-requires "nim >= 0.14.2"
+requires "nim >= 0.19.4"

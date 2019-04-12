@@ -22,7 +22,7 @@ const
   PACKETSZ = 512
 
 type
-  uncheckedArray {.unchecked.} [T] = array[0..100_000, T]
+  uncheckedArray [T] = UncheckedArray[T]
   AsyncAddrInfo* = distinct AddrInfo
 
 when defined(windows):
@@ -658,7 +658,7 @@ else:
             psin_len[] = cast[uint8](sizeof(Sockaddr_in))
 
           var addrp = cast[ptr Sockaddr_in](addr sockArr[ai])
-          addrp.sin_family = toInt(domain)
+          addrp.sin_family = TSa_Family(toInt(domain))
           addrp.sin_port = nativesockets.ntohs(cast[uint16](port))
           copyMem(addr addrp.sin_addr, record.rdata, 4)
           if k + 1 < count:
@@ -678,7 +678,7 @@ else:
             psin_len[] = cast[uint8](sizeof(Sockaddr_in6))
 
           var addrp = cast[ptr Sockaddr_in6](addr sockArr[ai])
-          addrp.sin6_family = toInt(domain)
+          addrp.sin6_family = TSa_Family(toInt(domain))
           addrp.sin6_port = nativesockets.ntohs(cast[uint16](port))
           copyMem(addr addrp.sin6_addr, record.rdata, 4 * 4)
           if k + 1 < count:
@@ -721,8 +721,6 @@ else:
         raise newException(ValueError, "No address records for domain!")
       of rtypeError:
         raise newException(ValueError, "Wrong record type in response!")
-      else:
-        raise newException(ValueError, "Unknown error!")
 
 proc free*(aip: ptr AsyncAddrInfo) =
   dealloc(cast[pointer](aip))
