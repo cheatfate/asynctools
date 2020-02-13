@@ -151,7 +151,7 @@ proc fire*(event: AsyncEv) =
   ## Set the internal flag of ``event`` to `true`. All tasks waiting for it
   ## to become `true` are awakened. Task that call `wait()` once the flag is
   ## `true` will not block at all.
-  proc wakeupAll() =
+  proc wakeupAll() {.gcsafe.} =
     if len(event.waiters) > 0:
       var w = event.waiters.popFirst()
       if not w.finished:
