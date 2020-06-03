@@ -116,6 +116,7 @@ else:
 
   when defined(windows):
     import winlean
+    import asyncpty
   else:
     import posix
 
