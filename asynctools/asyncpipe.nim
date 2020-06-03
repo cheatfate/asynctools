@@ -87,7 +87,7 @@ when defined(nimdoc):
     ## into ``data``, which must at least be of that size.
     ##
     ## Returned future will complete once all the data requested is read or
-    ## part of the data has been read.
+    ## part of the data has been read. A future with value 0 means end of file.
 
   proc asyncWrap*(readHandle: Handle|cint = 0,
                   writeHandle: Handle|cint = 0): AsyncPipe =
