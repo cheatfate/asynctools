@@ -886,7 +886,7 @@ proc execProcess(command: string, args: seq[string] = @[],
                 ): Future[tuple[exitcode: int, output: string]] {.async.} =
   result = (exitcode: int(STILL_ACTIVE), output: "")
   let bufferSize = 1024
-  var data = newStringOfCap(bufferSize)
+  var data = newString(bufferSize)
   var p = startProcess(command, args = args, env = env, options = options)
 
   while true:
