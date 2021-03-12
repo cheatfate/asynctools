@@ -32,6 +32,7 @@
 ##   close(o)
 
 import asyncdispatch, os
+import asyncpty
 
 when defined(nimdoc):
   type

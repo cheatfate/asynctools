@@ -40,6 +40,7 @@
 ##   close(ipc)
 
 import asyncdispatch, os, strutils
+import asyncpty
 
 type
   SideType* = enum ## Enum represents side of IPC channel (Read or Write)
@@ -245,7 +246,7 @@ elif defined(windows):
       discard closeHandle(eventChange)
       raiseOSError(err)
 
-    data = mapViewOfFileEx(handleMap, FILE_MAP_WRITE, 0, 0, size, nil)
+    data = mapViewOfFileEx(handleMap, FILE_MAP_WRITE, 0, 0, (WinSizeT)size, nil)
     if data == nil:
       let err = osLastError()
       discard closeHandle(handleMap)

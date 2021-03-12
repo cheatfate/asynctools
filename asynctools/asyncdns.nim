@@ -294,10 +294,10 @@ when defined(windows):
             addrArr[ai].ai_family = toInt(domain)
             addrArr[ai].ai_socktype = toInt(sockType)
             addrArr[ai].ai_protocol = toInt(protocol)
-            addrArr[ai].ai_addrlen = sizeof(Sockaddr_in)
+            addrArr[ai].ai_addrlen = (csize_t)sizeof(Sockaddr_in)
             addrArr[ai].ai_addr = addr sockArr[ai]
             var addrp = cast[ptr Sockaddr_in](addr sockArr[ai])
-            addrp.sin_family = toInt(domain).int16
+            addrp.sin_family = toInt(domain).uint16
             addrp.sin_port = nativesockets.ntohs(cast[uint16](port))
             copyMem(addr addrp.sin_addr, addr rec.data, 4)
             if k + 1 < count:
@@ -307,10 +307,10 @@ when defined(windows):
             addrArr[ai].ai_family = toInt(domain)
             addrArr[ai].ai_socktype = toInt(sockType)
             addrArr[ai].ai_protocol = toInt(protocol)
-            addrArr[ai].ai_addrlen = sizeof(Sockaddr_in6)
+            addrArr[ai].ai_addrlen = (csize_t)sizeof(Sockaddr_in6)
             addrArr[ai].ai_addr = addr sockArr[ai]
             var addrp = cast[ptr Sockaddr_in6](addr sockArr[ai])
-            addrp.sin6_family = toInt(domain).int16
+            addrp.sin6_family = toInt(domain).uint16
             addrp.sin6_port = nativesockets.ntohs(cast[uint16](port))
             copyMem(addr addrp.sin6_addr, addr rec.data, 4 * 4)
             if k + 1 < count:
