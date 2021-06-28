@@ -32,7 +32,6 @@
 ##   close(o)
 
 import asyncdispatch, os
-import asyncpty
 
 when defined(nimdoc):
   type
@@ -530,4 +529,3 @@ when isMainModule:
     let res = waitFor(receiver(o))
     doAssert(res.count == testsCount)
     doAssert(res.sum == testsCount * (1 + testsCount) div 2)
-
