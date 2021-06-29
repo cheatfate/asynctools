@@ -245,7 +245,7 @@ elif defined(windows):
       discard closeHandle(eventChange)
       raiseOSError(err)
 
-    data = mapViewOfFileEx(handleMap, FILE_MAP_WRITE, 0, 0, size, nil)
+    data = mapViewOfFileEx(handleMap, FILE_MAP_WRITE, 0, 0, size.WinSizeT, nil)
     if data == nil:
       let err = osLastError()
       discard closeHandle(handleMap)
