@@ -297,7 +297,7 @@ when defined(windows):
             addrArr[ai].ai_addrlen = sizeof(Sockaddr_in).csize_t
             addrArr[ai].ai_addr = addr sockArr[ai]
             var addrp = cast[ptr Sockaddr_in](addr sockArr[ai])
-            addrp.sin_family = toInt(domain).int16
+            addrp.sin_family = toInt(domain).uint16
             addrp.sin_port = nativesockets.ntohs(cast[uint16](port))
             copyMem(addr addrp.sin_addr, addr rec.data, 4)
             if k + 1 < count:
