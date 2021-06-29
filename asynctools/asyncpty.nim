@@ -66,6 +66,7 @@ else:
 
   when defined(windows):
     import winlean
+    import ./platforms/win
   else:
     import posix
 
@@ -92,13 +93,7 @@ else:
       ERROR_PIPE_NOT_CONNECTED = 233
       ERROR_NO_DATA = 232
       PIPE_UNLIMITED_INSTANCES = 255'i32
-
     type
-      CustomOverlapped = object of OVERLAPPED
-        data*: CompletionData
-
-      PCustomOverlapped* = ref CustomOverlapped
-
       AsyncPty* = ref object of RootRef
         name*: string
         fd: Handle

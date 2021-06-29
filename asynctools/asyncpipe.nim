@@ -116,6 +116,7 @@ else:
 
   when defined(windows):
     import winlean
+    import ./platforms/win
   else:
     import posix
 

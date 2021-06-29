@@ -94,7 +94,7 @@ when defined(nimdoc):
 elif defined(windows):
   import winlean
   import sets, hashes # this import only for HackDispatcher
-
+  import ./platforms/win
   const
     mapHeaderName = "asyncipc_"
     eventHeaderName = "asyncpipc_"
