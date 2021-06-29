@@ -283,6 +283,12 @@ else:
       else:
         var mode = x or O_NONBLOCK
         if fcntl(fd, F_SETFL, mode) == -1:
+          when defined(MacOSX):
+            if osLastError() == OSErrorCode(25'i32):
+              # For somehow previous fcntl to set FD into nonblocking mode fails
+              # with errno 25/ENOTTY although in fact the FD has been set to 
+              # nonblocking mode already. 
+              return
           raiseOSError(osLastError())
 
     proc newAsyncPty*(): AsyncPty =
