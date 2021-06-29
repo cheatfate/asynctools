@@ -294,7 +294,7 @@ when defined(windows):
             addrArr[ai].ai_family = toInt(domain)
             addrArr[ai].ai_socktype = toInt(sockType)
             addrArr[ai].ai_protocol = toInt(protocol)
-            addrArr[ai].ai_addrlen = sizeof(Sockaddr_in)
+            addrArr[ai].ai_addrlen = sizeof(Sockaddr_in).csize_t
             addrArr[ai].ai_addr = addr sockArr[ai]
             var addrp = cast[ptr Sockaddr_in](addr sockArr[ai])
             addrp.sin_family = toInt(domain).int16
@@ -307,7 +307,7 @@ when defined(windows):
             addrArr[ai].ai_family = toInt(domain)
             addrArr[ai].ai_socktype = toInt(sockType)
             addrArr[ai].ai_protocol = toInt(protocol)
-            addrArr[ai].ai_addrlen = sizeof(Sockaddr_in6)
+            addrArr[ai].ai_addrlen = sizeof(Sockaddr_in6).csize_t
             addrArr[ai].ai_addr = addr sockArr[ai]
             var addrp = cast[ptr Sockaddr_in6](addr sockArr[ai])
             addrp.sin6_family = toInt(domain).int16
