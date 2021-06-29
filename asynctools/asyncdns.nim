@@ -220,7 +220,7 @@ when defined(windows):
           dealloc(buffer)
           break
 
-    let sock = newAsyncNativeSocket(nativesockets.AF_INET,
+    let sock = createAsyncNativeSocket(nativesockets.AF_INET,
                                     nativesockets.SOCK_DGRAM,
                                     Protocol.IPPROTO_UDP)
 
@@ -577,7 +577,7 @@ else:
     if reqLength <= 0:
       raise newException(ValueError, "Could not create DNS query!")
 
-    let sock = newAsyncNativeSocket(nativesockets.AF_INET,
+    let sock = createAsyncNativeSocket(nativesockets.AF_INET,
                                     nativesockets.SOCK_DGRAM,
                                     Protocol.IPPROTO_UDP)
 
