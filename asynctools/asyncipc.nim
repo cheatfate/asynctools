@@ -95,6 +95,10 @@ elif defined(windows):
   import winlean
   import sets, hashes # this import only for HackDispatcher
 
+  when not declared(PCustomOverlapped):
+    type
+      PCustomOverlapped = CustomRef
+
   const
     mapHeaderName = "asyncipc_"
     eventHeaderName = "asyncpipc_"
@@ -245,7 +249,12 @@ elif defined(windows):
       discard closeHandle(eventChange)
       raiseOSError(err)
 
-    data = mapViewOfFileEx(handleMap, FILE_MAP_WRITE, 0, 0, size, nil)
+    when declared(WinSizeT):
+      let sizeB = size.WinSizeT
+    else:
+      let sizeB = size
+
+    data = mapViewOfFileEx(handleMap, FILE_MAP_WRITE, 0, 0, sizeB, nil)
     if data == nil:
       let err = osLastError()
       discard closeHandle(handleMap)

@@ -387,7 +387,7 @@ when defined(windows):
 
     var tmp = newWideCString(cmdl)
     var ee =
-      if e.str.isNil: nil
+      if e.str.isNil: newWideCString(cstring(nil))
       else: newWideCString(e.str, e.len)
     var wwd = newWideCString(wd)
     var flags = NORMAL_PRIORITY_CLASS or CREATE_UNICODE_ENVIRONMENT
