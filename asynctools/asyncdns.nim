@@ -346,7 +346,7 @@ else:
   when defined(linux) or defined(macosx):
     {.passL: "-lresolv".}
 
-  when defined(freebsd) or defined(linux) or defined(macosx):
+  when defined(freebsd) or defined(linux) or defined(macosx) or defined(haiku):
     const headers = """#include <sys/types.h>
                        #include <netinet/in.h>
                        #include <arpa/nameser.h>

@@ -879,6 +879,48 @@ else:
                 break
       return retFuture
 
+  when defined(haiku):
+    proc waitForExit*(p: AsyncProcess): Future[int] =
+      var retFuture = newFuture[int]("asyncproc.waitForExit")
+
+      proc cb(fd: AsyncFD): bool =
+        var status = cint(0)
+        let res = posix.waitpid(p.procId, status, WNOHANG)
+        if res <= 0:
+          retFuture.fail(newException(OSError, osErrorMsg(osLastError())))
+        else:
+          p.isExit = true
+          p.exitCode = statusToExitCode(status)
+          retFuture.complete(p.exitCode)
+
+      if p.isExit:
+        retFuture.complete(p.exitCode)
+      else:
+        while true:
+          var status = cint(0)
+          let res = posix.waitpid(p.procId, status, WNOHANG)
+          if res < 0:
+            retFuture.fail(newException(OSError, osErrorMsg(osLastError())))
+            break
+          elif res > 0:
+            p.isExit = true
+            p.exitCode = statusToExitCode(status)
+            retFuture.complete(p.exitCode)
+            break
+          else:
+            try:
+              # unavailable on haiku
+              #addProcess(p.procId, cb)
+              break
+            except:
+              let err = osLastError()
+              if cint(err) == ESRCH:
+                continue
+              else:
+                retFuture.fail(newException(OSError, osErrorMsg(err)))
+                break
+      return retFuture
+
 proc execProcess(command: string, args: seq[string] = @[],
                  env: StringTableRef = nil,
                  options: set[ProcessOption] = {poStdErrToStdOut, poUsePath,

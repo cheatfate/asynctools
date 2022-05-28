@@ -477,7 +477,11 @@ else:
     let pipeName = pipeHeaderName & name
 
     if side == sideReader:
-      pipeFd = open(pipeName, O_NONBLOCK or O_RDWR)
+      when defined(haiku):
+        # O_RDWR read on haiku errors out
+        pipeFd = open(pipeName, O_NONBLOCK or O_RDONLY)
+      else:
+        pipeFd = open(pipeName, O_NONBLOCK or O_RDWR)
     else:
       pipeFd = open(pipeName, O_NONBLOCK or O_WRONLY)
 

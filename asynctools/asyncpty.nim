@@ -368,7 +368,12 @@ when isMainModule:
     if writeFile(ptyHandle, addr data[0], len(data).int32, nil, nil) == 0:
       raiseOSError(osLastError())
   else:
-    var fd = posix.open(pty.name, posix.O_RDWR)
+    var fd: cint = 0
+    when defined(haiku):
+      # without O_NOCTTY is an error on haiku
+      fd = posix.open(pty.name, posix.O_RDWR or posix.O_NOCTTY)
+    else:
+      fd = posix.open(pty.name, posix.O_RDWR)
     if fd == -1:
       raiseOSError(osLastError())
 
