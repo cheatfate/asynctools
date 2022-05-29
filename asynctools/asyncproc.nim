@@ -908,17 +908,7 @@ else:
             retFuture.complete(p.exitCode)
             break
           else:
-            try:
-              # unavailable on haiku
-              #addProcess(p.procId, cb)
-              break
-            except:
-              let err = osLastError()
-              if cint(err) == ESRCH:
-                continue
-              else:
-                retFuture.fail(newException(OSError, osErrorMsg(err)))
-                break
+            break
       return retFuture
 
 proc execProcess(command: string, args: seq[string] = @[],
