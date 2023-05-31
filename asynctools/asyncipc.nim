@@ -183,11 +183,10 @@ elif defined(windows):
     let mapSize = size + mapMinSize
 
     doAssert(size > mapMinSize)
-
     let handleMap = createFileMappingW(INVALID_HANDLE_VALUE,
                                        cast[pointer](addr sa),
                                        PAGE_READWRITE, 0, mapSize.Dword,
-                                       cast[pointer](mapName))
+                                       cast[pointer](WideCString(mapName)))
     if handleMap == 0:
       raiseOSError(osLastError())
     var eventChange = createEvent(addr sa, 0, 0, addr nameChange[0])
@@ -267,7 +266,7 @@ elif defined(windows):
       interlockedOr(cast[ptr int32](data), 1)
 
     if register:
-      let p = getCurrentDispatcher()
+      let p = getGlobalDispatcher()
       p.handles.incl(AsyncFD(eventChange))
 
     result = AsyncIpcHandle(
@@ -285,7 +284,7 @@ elif defined(windows):
       interlockedAnd(cast[ptr int32](ipch.data), not(1))
 
     if unregister:
-      let p = getCurrentDispatcher()
+      let p = getGlobalDispatcher()
       p.handles.excl(AsyncFD(ipch.eventChange))
 
     if unmapViewOfFile(ipch.data) == 0:
