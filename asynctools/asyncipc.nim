@@ -130,6 +130,7 @@ elif defined(windows):
       ioPort: Handle
       handles: HashSet[AsyncFD]
     HackDispatcher = ptr HackDispatcherImpl
+    Dispatcher = HackDispatcher | PDispatcher
 
   proc openEvent(dwDesiredAccess: Dword, bInheritHandle: WINBOOL,
                  lpName: WideCString): Handle
@@ -142,8 +143,22 @@ elif defined(windows):
   proc interlockedAnd(a: ptr int32, b: int32)
        {.importc: "_InterlockedAnd", header: "intrin.h".}
 
-  proc getCurrentDispatcher(): HackDispatcher =
-    result = cast[HackDispatcher](getGlobalDispatcher())
+  proc getCurrentDispatcher(): Dispatcher =
+    when defined(nimv2):
+      # New runtime will run into segfault if using HackDispatcher, but old versions of Nim require
+      # HackDispatcher so we can access some internal fields.
+      # If using the new runtime then likely using a new enough Nim version that the needed fields
+      # are exported
+      getGlobalDispatcher()
+    else:
+      cast[HackDispatcher](getGlobalDispatcher())
+
+  template getIoHandler(p: Dispatcher): Handle =
+    ## Returns the IO handle for a dispatcher.
+    when p is PDispatcher:
+      p.getIoHandler()
+    else:
+      p.ioPort
 
   proc `$`*(ipc: AsyncIpc): string =
     if ipc.handleMap == Handle(0):
@@ -266,7 +281,7 @@ elif defined(windows):
       interlockedOr(cast[ptr int32](data), 1)
 
     if register:
-      let p = getGlobalDispatcher()
+      let p = getCurrentDispatcher()
       p.handles.incl(AsyncFD(eventChange))
 
     result = AsyncIpcHandle(
@@ -284,7 +299,7 @@ elif defined(windows):
       interlockedAnd(cast[ptr int32](ipch.data), not(1))
 
     if unregister:
-      let p = getGlobalDispatcher()
+      let p = getCurrentDispatcher()
       p.handles.excl(AsyncFD(ipch.eventChange))
 
     if unmapViewOfFile(ipch.data) == 0:
@@ -321,7 +336,7 @@ elif defined(windows):
   template registerWaitableChange(ipc: AsyncIpcHandle, pcd, handleCallback) =
     let p = getCurrentDispatcher()
     var flags = (WT_EXECUTEINWAITTHREAD or WT_EXECUTEONLYONCE).Dword
-    pcd.ioPort = cast[Handle](p.ioPort)
+    pcd.ioPort = p.getIoHandler()
     pcd.handleFd = AsyncFD(ipc.eventChange)
     var ol = PCustomOverlapped()
     GC_ref(ol)
