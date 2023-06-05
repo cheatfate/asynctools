@@ -130,7 +130,6 @@ elif defined(windows):
       ioPort: Handle
       handles: HashSet[AsyncFD]
     HackDispatcher = ptr HackDispatcherImpl
-    Dispatcher = HackDispatcher | PDispatcher
 
   proc openEvent(dwDesiredAccess: Dword, bInheritHandle: WINBOOL,
                  lpName: WideCString): Handle
@@ -143,7 +142,7 @@ elif defined(windows):
   proc interlockedAnd(a: ptr int32, b: int32)
        {.importc: "_InterlockedAnd", header: "intrin.h".}
 
-  proc getCurrentDispatcher(): Dispatcher =
+  proc getCurrentDispatcher(): auto =
     when defined(nimv2):
       # New runtime will run into segfault if using HackDispatcher, but old versions of Nim require
       # HackDispatcher so we can access some internal fields.
@@ -153,12 +152,9 @@ elif defined(windows):
     else:
       cast[HackDispatcher](getGlobalDispatcher())
 
-  template getIoHandler(p: Dispatcher): Handle =
+  template getIoHandler(p: HackDispatcher): Handle =
     ## Returns the IO handle for a dispatcher.
-    when p is PDispatcher:
-      p.getIoHandler()
-    else:
-      p.ioPort
+    p.ioPort
 
   proc `$`*(ipc: AsyncIpc): string =
     if ipc.handleMap == Handle(0):
