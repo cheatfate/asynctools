@@ -204,6 +204,9 @@ proc kill*(p: AsyncProcess)
   ## Kill the process ``p``. On Posix OSes the procedure sends ``SIGKILL`` to
   ## the process. On Windows ``kill()`` is simply an alias for ``terminate()``.
 
+proc close*(p: AsyncProcess)
+  ## When the process has finished executing, cleanup related handles.
+
 proc running*(p: AsyncProcess): bool
   ## Returns `true` if the process ``p`` is still running. Returns immediately.
 
@@ -264,7 +267,7 @@ when defined(windows):
       inc(L, x.len+1)
     (str, L)
 
-  proc close(p: AsyncProcess) =
+  proc close*(p: AsyncProcess) =
     if p.inPipe != nil: close(p.inPipe)
     if p.outPipe != nil: close(p.outPipe)
     if p.errPipe != nil: close(p.errPipe)
@@ -782,7 +785,7 @@ else:
       startProcessFail(data)
     {.pop}
 
-  proc close(p: AsyncProcess) =
+  proc close*(p: AsyncProcess) =
     ## We need to `wait` for process, to avoid `zombie`, so if `running()`
     ## returns `false`, then process exited and `wait()` was called.
     doAssert(not p.running())
