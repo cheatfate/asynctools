@@ -160,7 +160,7 @@ else:
     proc createPipe*(register = true): AsyncPipe =
 
       var number = 0'i64
-      var pipeName: WideCString
+      var pipeName: WideCStringObj
       var pipeIn: Handle
       var pipeOut: Handle
       var sa = SECURITY_ATTRIBUTES(nLength: sizeof(SECURITY_ATTRIBUTES).cint,
