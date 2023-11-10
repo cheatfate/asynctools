@@ -160,6 +160,7 @@ else:
     proc createPipe*(register = true): AsyncPipe =
 
       var number = 0'i64
+      var pipeName: string
       var pipeNameWS: WideCString
       var pipeIn: Handle
       var pipeOut: Handle
@@ -167,8 +168,8 @@ else:
                                    lpSecurityDescriptor: nil, bInheritHandle: 1)
       while true:
         QueryPerformanceCounter(number)
-        let p = pipeHeaderName & $number
-        pipeNameWS = newWideCString(p)
+        pipeName = pipeHeaderName & $number
+        pipeNameWS = newWideCString(pipeName)
         var openMode = FILE_FLAG_FIRST_PIPE_INSTANCE or FILE_FLAG_OVERLAPPED or
                        PIPE_ACCESS_INBOUND
         var pipeMode = PIPE_TYPE_BYTE or PIPE_READMODE_BYTE or PIPE_WAIT
@@ -182,6 +183,7 @@ else:
         else:
           break
 
+      pipeNameWS = newWideCString(pipeName)
       var openMode = (FILE_WRITE_DATA or SYNCHRONIZE)
       pipeOut = createFileW(pipeNameWS, openMode, 0, addr(sa), OPEN_EXISTING,
                             FILE_FLAG_OVERLAPPED, 0)
